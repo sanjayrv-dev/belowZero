@@ -13,6 +13,14 @@ const char* SourceLiteral(ActivationSource source) {
     return source == ActivationSource::Desktop ? "desktop" : "explorer";
 }
 
+std::string Utf16ToUtf8(const std::wstring& wide) {
+    if (wide.empty()) return {};
+    int len = WideCharToMultiByte(CP_UTF8, 0, wide.c_str(), static_cast<int>(wide.size()), nullptr, 0, nullptr, nullptr);
+    std::string out(static_cast<size_t>(len), '\0');
+    WideCharToMultiByte(CP_UTF8, 0, wide.c_str(), static_cast<int>(wide.size()), out.data(), len, nullptr, nullptr);
+    return out;
+}
+
 std::string NewLowercaseUuid() {
     UUID uuid;
     UuidCreate(&uuid);
@@ -23,17 +31,13 @@ std::string NewLowercaseUuid() {
 
     // UuidToStringW already yields lowercase, hyphenated digits — the same
     // shape as .NET's default Guid.ToString(), but convert explicitly rather
-    // than trust that across SDK versions.
-    std::string out(w.begin(), w.end());
+    // than trust that across SDK versions. Go through Utf16ToUtf8 (not a
+    // wchar_t-iterator std::string construction) so this never silently
+    // truncates a wide character to a byte — harmless for a UUID's own
+    // ASCII hex/hyphen/brace alphabet, but PR #1 correctly flagged the
+    // pattern itself as the kind of thing that mangles non-ASCII text.
+    std::string out = Utf16ToUtf8(w);
     for (char& c : out) c = static_cast<char>(tolower(static_cast<unsigned char>(c)));
-    return out;
-}
-
-std::string Utf16ToUtf8(const std::wstring& wide) {
-    if (wide.empty()) return {};
-    int len = WideCharToMultiByte(CP_UTF8, 0, wide.c_str(), static_cast<int>(wide.size()), nullptr, 0, nullptr, nullptr);
-    std::string out(static_cast<size_t>(len), '\0');
-    WideCharToMultiByte(CP_UTF8, 0, wide.c_str(), static_cast<int>(wide.size()), out.data(), len, nullptr, nullptr);
     return out;
 }
 

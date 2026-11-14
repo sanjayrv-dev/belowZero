@@ -1,4 +1,4 @@
-LIBRARY SSDShredder.ExplorerCommand
+LIBRARY "SSDShredder.ExplorerCommand.dll"
 
 EXPORTS
     DllGetClassObject   PRIVATE

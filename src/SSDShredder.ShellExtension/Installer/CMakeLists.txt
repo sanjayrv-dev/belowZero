@@ -1,0 +1,5 @@
+if(WIN32)
+    add_executable(SSDShredder.Installer Installer.cpp)
+    target_link_libraries(SSDShredder.Installer PRIVATE ShellExtensionCommon shell32 ole32)
+    set_target_properties(SSDShredder.Installer PROPERTIES OUTPUT_NAME "SSDShredder.Installer")
+endif()

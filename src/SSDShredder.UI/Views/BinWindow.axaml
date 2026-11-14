@@ -1,0 +1,88 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:vm="using:SSDShredder.UI.ViewModels"
+        mc:Ignorable="d"
+        x:Class="SSDShredder.UI.Views.BinWindow"
+        x:DataType="vm:BinViewModel"
+        Title="belowZero"
+        Width="280" Height="280"
+        MinWidth="220" MinHeight="220"
+        CanResize="True"
+        SystemDecorations="None"
+        TransparencyLevelHint="Transparent"
+        Background="Transparent"
+        Topmost="True"
+        ShowInTaskbar="False"
+        WindowStartupLocation="Manual"
+        DragDrop.AllowDrop="True">
+
+  <Window.KeyBindings>
+    <KeyBinding Gesture="Escape" Command="{Binding CancelCommand}" />
+    <KeyBinding Gesture="Enter" Command="{Binding PickFileCommand}" />
+  </Window.KeyBindings>
+
+  <Border Background="#CC101014"
+          CornerRadius="16"
+          BorderBrush="#33FFFFFF"
+          BorderThickness="1"
+          Padding="16"
+          AutomationProperties.LiveSetting="Polite"
+          AutomationProperties.Name="{Binding StatusAnnouncement}">
+    <Grid RowDefinitions="Auto,*,Auto">
+
+      <!-- Idle bin glyph: double-click/Enter opens the picker, drop starts inspection immediately. -->
+      <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="8"
+                  IsVisible="{Binding State, Converter={x:Static vm:BinStateConverters.IsIdleOrTerminal}}">
+        <Ellipse Width="28" Height="28" Fill="#2E7D32" />
+        <TextBlock Text="belowZero" FontSize="16" FontWeight="SemiBold" Foreground="White" VerticalAlignment="Center" />
+      </StackPanel>
+
+      <StackPanel Grid.Row="1" Spacing="10" VerticalAlignment="Center">
+
+        <TextBlock Text="{Binding SelectedFileName}"
+                   Foreground="White" FontWeight="SemiBold" TextWrapping="Wrap"
+                   IsVisible="{Binding SelectedFileName, Converter={x:Static vm:BinStateConverters.IsNotNull}}" />
+
+        <TextBlock Text="{Binding State}" Foreground="#B0BEC5" FontSize="12" />
+
+        <TextBlock Foreground="#ECEFF1" FontSize="12" TextWrapping="Wrap"
+                   IsVisible="{Binding State, Converter={x:Static vm:BinStateConverters.IsAwaitingConfirmation}}">
+          <TextBlock.Text>
+            <MultiBinding StringFormat="{}{0:N0} bytes covered · {1:N0} bytes uncovered tail">
+              <Binding Path="CoveredBytes" />
+              <Binding Path="TailBytes" />
+            </MultiBinding>
+          </TextBlock.Text>
+        </TextBlock>
+
+        <TextBlock Text="{Binding IneligibleReason}" Foreground="#FFB74D" FontSize="12" TextWrapping="Wrap"
+                   IsVisible="{Binding IneligibleReason, Converter={x:Static vm:BinStateConverters.IsNotNull}}" />
+
+        <TextBlock Text="{Binding ReceiptText}" Foreground="#A5D6A7" FontSize="12" TextWrapping="Wrap"
+                   IsVisible="{Binding ReceiptText, Converter={x:Static vm:BinStateConverters.IsNotNull}}" />
+
+        <TextBlock Text="{Binding BusyNotice}" Foreground="#FFCC80" FontSize="12" TextWrapping="Wrap"
+                   IsVisible="{Binding BusyNotice, Converter={x:Static vm:BinStateConverters.IsNotNull}}" />
+
+        <TextBlock Text="Simulated worker result — no real device I/O." Foreground="#90A4AE" FontSize="11"
+                   FontStyle="Italic" TextWrapping="Wrap" IsVisible="{Binding LastResultIsMock}" />
+
+        <ProgressBar IsIndeterminate="True" Height="4"
+                     IsVisible="{Binding State, Converter={x:Static vm:BinStateConverters.IsProcessing}}" />
+      </StackPanel>
+
+      <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+        <Button Content="Create vault" Command="{Binding OfferVaultInitCommand}" IsVisible="{Binding OfferVault}" />
+        <Button Content="Cancel" Command="{Binding CancelCommand}" IsVisible="{Binding CanCancel}" />
+        <Button Content="Approve" Command="{Binding ApproveCommand}" IsVisible="{Binding CanApprove}"
+                Classes="accent" />
+        <Button Content="Dismiss" Command="{Binding DismissCommand}"
+                IsVisible="{Binding State, Converter={x:Static vm:BinStateConverters.IsCompletedOrAttention}}" />
+        <Button Content="Choose file…" Command="{Binding PickFileCommand}"
+                IsVisible="{Binding State, Converter={x:Static vm:BinStateConverters.IsIdleOrTerminal}}" />
+      </StackPanel>
+    </Grid>
+  </Border>
+</Window>

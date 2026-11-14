@@ -1,0 +1,51 @@
+<!--
+  Reference fragment, not wired into a build: docs/02_SYSTEM_ARCHITECTURE.md
+  describes registering this IExplorerCommand with package identity —
+
+    "Register com:SurrogateServer/com:Class and
+     desktop4:FileExplorerContextMenus/desktop5:ItemType (Type="*"), with the
+     same CLSID on desktop5:Verb."
+
+  — which is the MSIX/sparse-package extension model, not the classic
+  per-user registry registration this scaffold's Registration.cpp performs
+  today (RegisterExplorerCommand: HKCU\...\shell\<verb>\ExplorerCommandHandler).
+  Both land on the same CLSID (kExplorerCommandClsidString in Clsids.h) and
+  the same DLL, so switching from one registration path to the other later
+  doesn't touch ExplorerCommand.cpp at all — only the installer's choice of
+  which registration call(s) to run.
+
+  Merge this Extensions block into the product's AppxManifest.xml (or sparse
+  package manifest) once the installer adopts MSIX packaging. Replace
+  CLSID-PLACEHOLDER with kExplorerCommandClsidString and DLL-PLACEHOLDER with
+  the installed DLL's path, and give the package the identity/publisher the
+  installer's signing cert uses.
+-->
+<Package
+    xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
+    xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
+    xmlns:desktop4="http://schemas.microsoft.com/appx/manifest/desktop/windows10/4"
+    xmlns:desktop5="http://schemas.microsoft.com/appx/manifest/desktop/windows10/5"
+    xmlns:com="http://schemas.microsoft.com/appx/manifest/com/windows10"
+    IgnorableNamespaces="uap desktop4 desktop5 com">
+  <Applications>
+    <Application Id="belowZero">
+      <Extensions>
+        <com:Extension Category="windows.comServer">
+          <com:ComServer>
+            <com:SurrogateServer DisplayName="belowZero ExplorerCommand">
+              <com:Class Id="CLSID-PLACEHOLDER" Path="DLL-PLACEHOLDER" ThreadingModel="STA" />
+            </com:SurrogateServer>
+          </com:ComServer>
+        </com:Extension>
+
+        <desktop4:Extension Category="windows.fileExplorerContextMenus">
+          <desktop4:FileExplorerContextMenus>
+            <desktop5:ItemType Type="*">
+              <desktop5:Verb Id="belowZero.Shred" Clsid="CLSID-PLACEHOLDER" />
+            </desktop5:ItemType>
+          </desktop4:FileExplorerContextMenus>
+        </desktop4:Extension>
+      </Extensions>
+    </Application>
+  </Applications>
+</Package>

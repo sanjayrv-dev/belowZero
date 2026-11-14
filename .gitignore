@@ -1,0 +1,16 @@
+# .NET
+bin/
+obj/
+*.user
+
+# Native (CMake / Visual Studio) build output under SSDShredder.ShellExtension
+build/
+out/
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+*.vcxproj.user
+.vs/
+
+# OS cruft
+.DS_Store

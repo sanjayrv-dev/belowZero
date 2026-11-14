@@ -6,7 +6,7 @@ Observed results only. Expected behaviour lives in docs/01 and docs/02.
 - Windows version: 10.0.26300.0 (build number is above 24H2/25H2 retail 26100/26200; likely a preview channel — unverified).
 - Disk: Samsung BM9C1 1024 GB, NVMe, MediaType SSD (Get-PhysicalDisk). Volume C: is NTFS, 4096-byte clusters, page size 4096.
 - `fsutil behavior query DisableDeleteNotify`: NTFS = 0, ReFS = 0 (TRIM allowed).
-- BitLocker status: not determined (`manage-bde -status C:` needs an elevated shell).
+- BitLocker: `manage-bde -status C:` (elevated) shows C: fully decrypted, protection off, no key protectors, unlocked. So the 326 refusal is not caused by BitLocker on this machine.
 
 ## Results (`dotnet test`, 40/40 passing at commit c171aae; 62/62 at 3d91b47)
 - Inspector verdict for a 12,903-byte temp file: eligible, bus=nvme, covered=12,288, tail=615 (IncursSeekPenalty=False, TrimEnabled=True, 1 disk).
@@ -58,4 +58,4 @@ Observed results only. Expected behaviour lives in docs/01 and docs/02.
 
 ## Not yet run
 - Positive TRIM acknowledgement on real hardware (needs a device whose stack accepts file-level TRIM; try another NVMe or a SATA SSD).
-- Unknown-bridge/USB fallback on real hardware, symlink fixture (needs privilege), BitLocker status (needs elevation).
+- Unknown-bridge/USB fallback on real hardware, symlink fixture (needs privilege).

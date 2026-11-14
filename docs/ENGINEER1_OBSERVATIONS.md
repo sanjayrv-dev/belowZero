@@ -27,6 +27,14 @@ Observed results only. Expected behaviour lives in docs/01 and docs/02.
 ## Also covered by tests now
 - Classifier edge cases (sparse, compressed, EFS, named stream, reparse, non-NTFS, unknown bus, null/multi-disk topology, rotational, TRIM disabled, failed/unsupported query, short coverage, empty, page-aligned) and WorkerFixtures consistency.
 
+## Test machine 2
+- Windows 10.0.26200 (Windows 11 Pro; `Get-ComputerInfo` reports "Windows 10 Pro"). One physical disk: PC SN5000S WD 1024GB, NVMe, SSD, 1,024,209,543,168 bytes. C: (NTFS, 1 TB) plus three unlettered recovery/support partitions. %TEMP% is on C: (disk 0). NTFS and ReFS `DisableDeleteNotify` = 0. BitLocker status not collected (shell not elevated). No second internal volume, so the second-volume diagnostic was skipped.
+- `dotnet test`: 62/62 passing at 95daad7 (.NET SDK 9.0.321).
+- **326 diagnostic:** 1 page, 3 pages (flush and no flush, exclusive and shared rw) and 1 MiB whole file all returned `win32=326 returned=0 processed=null`. No `win32=0`, so still no positive acknowledgement. Write-data-only access gave 326 in the full run but 1224 in a second run (user-mapped section, access artefact).
+- Real submitter: `Eligible` (bus=nvme, covered=12288, tail=615), then `State = Failed ... trim refused by the stack (326); file left intact`, entry preserved.
+- Sizing: len=600 already reported `NoFullPage` (non-resident, first non-resident length observed: 600), versus resident up to 600 on machine 1. 4096 and up eligible, same as machine 1. The resident threshold varies by machine.
+- Conclusion: a second NVMe model (WD SN5000S) on a similar Windows build also refuses file-level TRIM with 326, matching machine 1 (Samsung BM9C1, 10.0.26300).
+
 ## Not yet run
 - Positive TRIM acknowledgement on real hardware (needs a device whose stack accepts file-level TRIM; try another NVMe or a SATA SSD).
 - Unknown-bridge/USB fallback on real hardware, ACL-denied target, sparse/linked fixtures on disk.

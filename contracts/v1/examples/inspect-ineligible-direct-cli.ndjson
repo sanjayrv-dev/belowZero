@@ -1,0 +1,3 @@
+{"v":1,"id":"d4e5f6a7-8b9c-4d1e-a2f3-9b0c1d2e3f4a","op":"inspect","target":"E:\\UsbStick\\notes.txt","confirmed":false}
+{"v":1,"id":"d4e5f6a7-8b9c-4d1e-a2f3-9b0c1d2e3f4a","seq":1,"type":"progress","phase":"inspecting"}
+{"v":1,"id":"d4e5f6a7-8b9c-4d1e-a2f3-9b0c1d2e3f4a","seq":2,"type":"result","code":0,"state":"completed","evidence":{"eligible":false,"reason":"topology","bus":"BusTypeUsb","coveredBytes":0,"tailBytes":0}}

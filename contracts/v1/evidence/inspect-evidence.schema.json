@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://belowzero/contracts/v1/evidence/inspect-evidence.schema.json",
+  "title": "Inspect evidence v1",
+  "description": "Result evidence for an op=inspect request (and a connection's op=inspect before a held shred). SSDShredder.Worker.Protocol.InspectEvidence.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["eligible", "reason", "bus", "coveredBytes", "tailBytes"],
+  "properties": {
+    "eligible": { "type": "boolean" },
+    "reason": { "enum": ["eligible", "filesystem", "topology", "capability", "fileType", "streams", "links", "noExtents", "noFullPage", "unknown"] },
+    "bus": {
+      "description": "SDK bus-type name (e.g. BusTypeNvme), or null when unknown.",
+      "type": ["string", "null"]
+    },
+    "coveredBytes": { "type": ["integer", "null"], "minimum": 0 },
+    "tailBytes": { "type": ["integer", "null"], "minimum": 0 },
+    "selectionToken": {
+      "description": "Present only when eligible and returned on a connection (not a direct CLI inspect).",
+      "type": "string",
+      "pattern": "^[0-9a-f]{32}$"
+    }
+  },
+  "if": { "properties": { "eligible": { "const": true } } },
+  "then": { "required": ["coveredBytes", "tailBytes"] }
+}

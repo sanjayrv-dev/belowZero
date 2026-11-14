@@ -18,4 +18,8 @@
     <InternalsVisibleTo Include="SSDShredder.Worker.Tests" />
   </ItemGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\SSDShredder.Core\SSDShredder.Core.csproj" />
+  </ItemGroup>
+
 </Project>

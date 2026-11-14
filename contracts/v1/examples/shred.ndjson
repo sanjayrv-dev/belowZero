@@ -1,0 +1,3 @@
+{"v":1,"id":"ba09878a-81f9-48f4-832a-bef3818e2ddd","op":"shred","target":"C:\\Demo\\fixture.bin","confirmed":true,"selectionToken":"b84d239cd73a26ac9d5f713565040a5f"}
+{"v":1,"id":"ba09878a-81f9-48f4-832a-bef3818e2ddd","seq":1,"type":"progress","phase":"trimming"}
+{"v":1,"id":"ba09878a-81f9-48f4-832a-bef3818e2ddd","seq":2,"type":"result","code":0,"state":"completed","evidence":{"rangesRequested":1,"rangesProcessed":1,"coveredBytes":4096,"tailBytes":615,"entry":"removed"}}

@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://belowzero/contracts/v1/evidence/vault-evidence.schema.json",
+  "title": "Vault evidence v1",
+  "description": "Result evidence for op=vault-init/vault-status/vault-close. SSDShredder.Worker.Protocol.VaultEvidence. The five 'ready' fields are written together only when the worker has live conversion/protection facts (typically phase=ready); absent otherwise.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["vaultId", "phase", "mount", "lockedObserved"],
+  "properties": {
+    "vaultId": { "type": ["string", "null"], "format": "uuid" },
+    "phase": { "enum": ["creating", "ready", "closing", "retired", "orphan", "unknown"] },
+    "mount": {
+      "description": "Mount path, present only while phase=ready.",
+      "type": ["string", "null"]
+    },
+    "lockedObserved": { "type": ["boolean", "null"] },
+    "conversion": { "const": "fullyEncrypted" },
+    "protectionOn": { "const": true },
+    "protectorTypes": {
+      "type": "array",
+      "items": { "type": "integer" },
+      "const": [8]
+    },
+    "autoUnlock": { "const": false },
+    "encryptionMethod": { "enum": [6, 7] }
+  },
+  "dependentRequired": {
+    "conversion": ["protectionOn", "protectorTypes", "autoUnlock", "encryptionMethod"],
+    "protectionOn": ["conversion", "protectorTypes", "autoUnlock", "encryptionMethod"]
+  }
+}

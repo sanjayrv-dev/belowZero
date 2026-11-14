@@ -8,6 +8,14 @@ namespace SSDShredder.Core;
 public enum ShredState { Completed = 0, Invalid = 2, Cancelled = 3, Unsupported = 4, Denied = 5, Busy = 6, Failed = 7, Indeterminate = 8 }
 public enum EntryState { Preserved, Removed, Unknown }
 
+/// <summary>Outcome of <see cref="HeldFile.RevalidateForCommit"/>.</summary>
+public enum RevalidateOutcome { Ok, IdentityChanged, NoLongerEligible, CoverageChanged, Failed }
+
+/// <summary>Outcome of <see cref="HeldFile.TrimOnly"/>.</summary>
+public enum TrimAttemptOutcome { Completed, NotSubmitted, Partial, Unknown }
+
+public readonly record struct TrimAttemptResult(TrimAttemptOutcome Outcome, uint? RangesRequested, uint? RangesProcessed);
+
 public sealed record ShredResult(ShredState State, ulong CoveredBytes, ulong TailBytes,
     uint? RangesRequested, uint? RangesProcessed, EntryState Entry, string Message);
 
@@ -154,6 +162,57 @@ public sealed class HeldFile : IDisposable
 
     static bool SameIdentity(FileIdentity a, FileIdentity b)
         => a.VolumeSerial == b.VolumeSerial && a.FileId.AsSpan().SequenceEqual(b.FileId) && a.Length == b.Length;
+
+    // --- Decomposed mirror of Commit(), for callers that need revalidate / trim / unlink as three
+    // separate calls (a GUI session: inspect, hold, then a later confirmed shred on the same
+    // connection) instead of one atomic call. Commit() above is intentionally left untouched by
+    // this addition — it is the already hardware-verified one-shot CLI path (see
+    // docs/ENGINEER1_OBSERVATIONS.md) and none of its behavior changes. Each method below applies
+    // exactly one of Commit()'s checks, in the same order, with the same classification.
+
+    /// <summary>Recheck identity, eligibility and coverage on the held handle. Mirrors the first half of Commit().</summary>
+    public RevalidateOutcome RevalidateForCommit()
+    {
+        if (_handle is null) throw new ObjectDisposedException(nameof(HeldFile));
+        InspectionResult now;
+        try { now = _engine.Inspector(_handle); }
+        catch (Win32Exception) { return RevalidateOutcome.Failed; }
+        if (!SameIdentity(now.Identity, Inspection.Identity)) return RevalidateOutcome.IdentityChanged;
+        if (!now.Decision.Eligible) return RevalidateOutcome.NoLongerEligible;
+        if (now.Decision.CoveredBytes != Inspection.Decision.CoveredBytes || now.Decision.TailBytes != Inspection.Decision.TailBytes)
+            return RevalidateOutcome.CoverageChanged;
+        return RevalidateOutcome.Ok;
+    }
+
+    /// <summary>Flushes and submits trim for [0, CoveredBytes) only. Never unlinks. Call only after an Ok RevalidateForCommit().</summary>
+    public TrimAttemptResult TrimOnly()
+    {
+        if (_handle is null) throw new ObjectDisposedException(nameof(HeldFile));
+        if (Native.FlushFileBuffers(_handle) == 0) return new TrimAttemptResult(TrimAttemptOutcome.NotSubmitted, 1, null);
+
+        var ranges = new List<(ulong, ulong)> { (0UL, Inspection.Decision.CoveredBytes) };
+        uint requested = (uint)ranges.Count;
+        var sub = _engine.Submitter.Submit(_handle, ranges);
+
+        if (sub.Win32Error is Native.ErrorInvalidFunction or Native.ErrorNotSupported
+            or Native.ErrorNoRangesProcessed or Native.ErrorDeviceFeatureNotSupported or Native.ErrorFileLevelTrimNotSupported)
+            return new TrimAttemptResult(TrimAttemptOutcome.NotSubmitted, requested, 0);
+        if (sub.Win32Error != 0) return new TrimAttemptResult(TrimAttemptOutcome.Unknown, requested, null);
+        if (sub.RangesProcessed is null) return new TrimAttemptResult(TrimAttemptOutcome.Unknown, requested, null);
+        if (sub.RangesProcessed != requested) return new TrimAttemptResult(TrimAttemptOutcome.Partial, requested, sub.RangesProcessed);
+        return new TrimAttemptResult(TrimAttemptOutcome.Completed, requested, sub.RangesProcessed);
+    }
+
+    /// <summary>Sets delete disposition on this handle, closes it, and verifies the name. Call only after an acknowledged TrimOnly().</summary>
+    public EntryState UnlinkOnly()
+    {
+        if (_handle is null) throw new ObjectDisposedException(nameof(HeldFile));
+        int derr = _engine.Disposer.MarkForDelete(_handle);
+        if (derr != 0) return EntryState.Preserved; // Mirrors Commit(): handle stays open, caller's Dispose() releases it untouched.
+        _handle.Dispose();
+        _handle = null;
+        return VerifyEntry();
+    }
 
     EntryState VerifyEntry()
     {

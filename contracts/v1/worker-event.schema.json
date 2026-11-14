@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://belowzero/contracts/v1/worker-event.schema.json",
+  "title": "Worker event v1",
+  "description": "One NDJSON line emitted by the worker: zero or more 'progress' events followed by exactly one 'result' event per request id. Sequence numbers start at 1 per request. SSDShredder.Worker.Protocol.RequestEmitter. IMPORTANT: a bare event carries no 'op' field, so its evidence shape can only be resolved by the consumer correlating 'id' back to the op it sent — see contracts/v1/evidence/*.schema.json for the four possible shapes and contracts/v1/README.md for how to pick the right one.",
+  "oneOf": [
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["v", "id", "seq", "type", "phase"],
+      "properties": {
+        "v": { "const": 1 },
+        "id": { "type": "string", "format": "uuid" },
+        "seq": { "type": "integer", "minimum": 1 },
+        "type": { "const": "progress" },
+        "phase": { "enum": ["inspecting", "confirming", "trimming", "unlinking", "creating", "encrypting", "locking", "reconciling"] }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["v", "id", "seq", "type", "code", "state", "evidence"],
+      "properties": {
+        "v": { "const": 1 },
+        "id": { "type": "string", "format": "uuid" },
+        "seq": { "type": "integer", "minimum": 1 },
+        "type": { "const": "result" },
+        "code": { "enum": [0, 2, 3, 4, 5, 6, 7, 8, 9] },
+        "state": { "enum": ["completed", "invalid", "cancelled", "unsupported", "denied", "busy", "failed", "indeterminate", "recovery"] },
+        "evidence": {
+          "description": "null, or one of contracts/v1/evidence/{inspect,shred,vault,probe}-evidence.schema.json depending on the request's op.",
+          "type": ["object", "null"]
+        }
+      }
+    }
+  ]
+}

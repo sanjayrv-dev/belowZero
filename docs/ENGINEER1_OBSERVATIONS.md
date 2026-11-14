@@ -39,3 +39,8 @@ Observed results only. Expected behaviour lives in docs/01 and docs/02.
 - **New fact this machine adds: `C:` reports BitLocker protection ON.** Test machine 1 above left BitLocker "not determined." Two real machines with file-level TRIM refused is itself a data point: the positive (TRIM actually acknowledged) path still has zero real coverage and needs a third, different drive/controller.
 - Other real-Core cases exercised, all leaving the target file untouched: a 300-byte file reports `noExtents` (exit 4); a file held open elsewhere reports exit 6 (busy); a non-interactive shred without `--confirm` reports exit 2.
 - Real UAC accept case: `--vault-status` reached the elevated helper and returned a correct answer (run from the `vhdx-vault` build, before its latest 3 commits were merged into `main`).
+
+### Re-run at main @ 8207fef (after merging vhdx-vault's 3 commits and fixing the UI's ActivationRouter pipe bug)
+- `dotnet test`: Core 73/73, Worker 235/235, UI 25/25 — full green, 0 warnings on the solution build. The 14 new Worker tests that only exercise Windows-only code (added by the merged commits) all pass here; the 3 `ActivationRouterTests` that caught the pipe bug now pass too.
+- UI standalone, live: a second launch hands off to the first and exits 0 in ~340ms; one instance stays running. Confirms the `PipeOptions.CurrentUserOnly` + explicit `PipeSecurity` fix.
+- `SSDShredder.ShellExtension`: clean rebuild, Debug and Release, 0 errors and 0 warnings (the C4244 from PR #1 is gone).

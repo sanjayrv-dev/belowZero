@@ -40,6 +40,22 @@ Observed results only. Expected behaviour lives in docs/01 and docs/02.
 - Decision (v1): **clean refusal.** When file-level TRIM is refused (313/317/326) the executor reports Failed (exit 7), leaves the file and entry in place, and nothing is unlinked. Workers and UI must treat this as an expected result on common laptop NVMe, not an error condition. `WorkerFixtures.Unsupported` and `Partial` model the refusal and partial cases.
 - Open: whether any local stack accepts file-level TRIM (SATA SSD, thin-provisioned virtual disk, Storage Spaces are candidates; unverified).
 
+## Refusal paths on disk (machine 1, real Worker CLI, throwaway files in %TEMP%, 12,903 B unless noted)
+| Case | `--inspect` | `--shred --confirm` |
+|---|---|---|
+| baseline | eligible, BusTypeNvme, 12288 + 615 | exit 7 failed (326), entry preserved |
+| sparse | streams | exit 4 unsupported, file kept |
+| hard link | links | exit 4 unsupported, file kept |
+| named stream | streams | exit 4 unsupported, file kept |
+| compressed | streams | not run |
+| 100 B / empty | noExtents (resident here) | exit 4 unsupported, file kept (100 B) |
+| ACL deny write/delete | exit 5 denied | exit 5 denied, file kept |
+| exclusively opened | exit 6 busy | exit 6 busy, file kept |
+| missing file | exit 4 unsupported | not run |
+| relative, UNC, `file:stream` path | exit 2, no result line | not run |
+- Not run: symlink (needs privilege) and USB/unknown bridge (no USB drive on this machine).
+- Possible contract questions for the lead: a missing file reports exit 4 (unsupported); path-policy rejections exit 2 without a result event.
+
 ## Not yet run
 - Positive TRIM acknowledgement on real hardware (needs a device whose stack accepts file-level TRIM; try another NVMe or a SATA SSD).
-- Unknown-bridge/USB fallback on real hardware, ACL-denied target, sparse/linked fixtures on disk.
+- Unknown-bridge/USB fallback on real hardware, symlink fixture (needs privilege), BitLocker status (needs elevation).

@@ -30,8 +30,12 @@ public sealed class WorkerEnvironment
         return new WorkerEnvironment
         {
             Simulated = false,
-            Core = new UnavailableCore(),
-            CoreAvailable = false,
+            // Wired to the real Core (Engineer 1) per this project's README "Integration
+            // seams" note. Not yet run on real Windows hardware — see
+            // CoreAdapter/CoreFileDisposalAdapter.cs's header before trusting this with
+            // real data; SSDSHREDDER_SIMULATE=1 remains available as a safe fallback.
+            Core = new CoreAdapter.CoreFileDisposalAdapter(),
+            CoreAvailable = true,
             Platform = new WindowsVaultPlatform(),
             Journal = new VaultJournal(Path.Combine(data, "journal")),
             Options = new VaultOptions

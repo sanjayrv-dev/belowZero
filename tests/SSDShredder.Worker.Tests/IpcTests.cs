@@ -94,6 +94,8 @@ public class PipeTests
     [InlineData(Ops.VaultClose, true, 9)]
     [InlineData(Ops.VaultInit, false, 9)]
     [InlineData(Ops.VaultStatus, false, 7)]
+    [InlineData(Ops.Shred, true, 8)]
+    [InlineData(Ops.Inspect, false, 7)]
     public void A_lost_completion_is_reported_once_and_never_replayed(string op, bool confirmed, int expected)
     {
         // The far end reads the request and goes away without answering.
@@ -380,6 +382,87 @@ public sealed class EndToEndTests : IDisposable
         Assert.Equal(6, close.ExitCode);
         Assert.Equal("ready", close.Evidence.GetProperty("phase").GetString());
         Assert.Equal("ready", Run(["--vault-status", id]).Evidence.GetProperty("phase").GetString());
+    }
+
+    private void WaitForNoOwners()
+    {
+        for (int i = 0; i < 50 && Owners().Count > 0; i++) Thread.Sleep(100);
+        Assert.Empty(Owners());
+    }
+
+    [Fact]
+    public void A_policy_refusal_ends_as_unsupported_with_nothing_left_behind()
+    {
+        RunResult init = Run(["--vault-init"], new() { ["SSDSHREDDER_SIM_FAULTS"] = "protect:PolicyRefused" });
+        Assert.True(init.ExitCode == 4, init.Stderr + string.Join("\n", init.Events));
+        Assert.Equal("retired", init.Evidence.GetProperty("phase").GetString());
+        Assert.Equal(JsonValueKind.Null, init.Evidence.GetProperty("mount").ValueKind);
+        Assert.False(init.Evidence.TryGetProperty("conversion", out _));
+
+        // No session owner stays behind for a vault that was never published.
+        WaitForNoOwners();
+        string id = init.Evidence.GetProperty("vaultId").GetString()!;
+        RunResult status = Run(["--vault-status", id]);
+        Assert.Equal(0, status.ExitCode);
+        Assert.Equal("retired", status.Evidence.GetProperty("phase").GetString());
+    }
+
+    [Fact]
+    public void A_failed_lock_reports_9_and_keeps_the_vault_closed_to_use()
+    {
+        RunResult init = Run(["--vault-init"], new() { ["SSDSHREDDER_SIM_FAULTS"] = "lock:RecoveryKeyRequired" });
+        Assert.Equal(0, init.ExitCode);
+        string id = init.Evidence.GetProperty("vaultId").GetString()!;
+
+        RunResult close = Run(["--vault-close", id, "--confirm"]);
+        Assert.True(close.ExitCode == 9, close.Stderr + string.Join("\n", close.Events));
+        Assert.Equal("closing", close.Evidence.GetProperty("phase").GetString());
+        Assert.Equal(JsonValueKind.Null, close.Evidence.GetProperty("mount").ValueKind);
+        Assert.Equal(JsonValueKind.Null, close.Evidence.GetProperty("lockedObserved").ValueKind);
+
+        // The owner is still there, holding the image, and says the same.
+        Assert.Single(Owners());
+        RunResult status = Run(["--vault-status", id]);
+        Assert.Equal("closing", status.Evidence.GetProperty("phase").GetString());
+        Assert.Equal(JsonValueKind.Null, status.Evidence.GetProperty("mount").ValueKind);
+    }
+
+    [Fact]
+    public void A_failed_lock_closes_through_the_detach_route_when_that_route_is_allowed()
+    {
+        RunResult init = Run(["--vault-init"], new()
+        {
+            ["SSDSHREDDER_SIM_FAULTS"] = "lock:RecoveryKeyRequired",
+            ["SSDSHREDDER_SIM_DETACH_ROUTE"] = "1",
+        });
+        string id = init.Evidence.GetProperty("vaultId").GetString()!;
+
+        RunResult close = Run(["--vault-close", id, "--confirm"]);
+        Assert.True(close.ExitCode == 0, close.Stderr + string.Join("\n", close.Events));
+        Assert.Equal("retired", close.Evidence.GetProperty("phase").GetString());
+        Assert.True(close.Evidence.GetProperty("lockedObserved").GetBoolean());
+        WaitForNoOwners();
+    }
+
+    [Fact]
+    public void An_interrupted_cleanup_is_finished_later_by_recovery()
+    {
+        var optIn = new Dictionary<string, string> { ["SSDSHREDDER_SIM_OPTIN"] = "1" };
+        RunResult init = Run(["--vault-init"], new(optIn) { ["SSDSHREDDER_SIM_FAULTS"] = "delete:Failed" });
+        string id = init.Evidence.GetProperty("vaultId").GetString()!;
+
+        // Locked and detached, but the backing image could not be retired.
+        RunResult close = Run(["--vault-close", id, "--confirm"]);
+        Assert.True(close.ExitCode == 9, close.Stderr + string.Join("\n", close.Events));
+        Assert.Equal("closing", close.Evidence.GetProperty("phase").GetString());
+        Assert.True(close.Evidence.GetProperty("lockedObserved").GetBoolean());
+
+        KillOwners();
+        RunResult later = Run(["--vault-close", id, "--confirm"], optIn);
+        Assert.True(later.ExitCode == 0, later.Stderr + string.Join("\n", later.Events));
+        Assert.Equal("retired", later.Evidence.GetProperty("phase").GetString());
+        Assert.True(later.Evidence.GetProperty("lockedObserved").GetBoolean());
+        Assert.Contains(later.Events, e => e.GetProperty("type").GetString() == "progress" && e.GetProperty("phase").GetString() == "reconciling");
     }
 
     [Fact]

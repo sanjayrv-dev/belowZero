@@ -104,6 +104,41 @@ exit 4, and nothing is touched.
 15. A vault verb sent to an unelevated helper is answered with code 2 (invalid). Code 5
     (denied) may describe it better.
 
+### Where the architecture doc already answers
+
+These three need a confirmation, not a decision.
+
+- **1.** `unlinking` is in the published phase list. The shred example is shorter than a
+  real run, so a UI must accept any listed phase before the result.
+- **5.** Code 5 is "authority/identity failed", which is what a wrong or expired token is.
+- **8.** The doc puts the worker in an installer-owned, protected Program Files folder, so
+  "same folder as the worker" is the trusted image, provided question 12 is settled.
+
+The rest are open: 2, 3, 4, 6, 7, 9 and 10 to 15. Question 6 (simulated receipts look
+real) is the one to settle before any demo.
+
+## Simulated coverage of the charter flows
+
+Each flow below has a state-machine test, and those marked CLI also run through real
+worker processes and pipes. All of it is simulated: none of it shows that real VHDX,
+BitLocker or UAC behaviour works.
+
+| Flow | Tests |
+| --- | --- |
+| Policy refusal | `A_policy_refusal_is_unsupported_and_the_new_image_is_undone`, CLI `A_policy_refusal_ends_as_unsupported_with_nothing_left_behind` |
+| UAC refusal (1223) | `A_helper_that_never_started_yields_one_synthesized_result`, with a fake launcher only |
+| Failed lock | `A_refused_lock_…`, `A_lock_refused_because_something_is_open_…`, the detach-route tests, CLI `A_failed_lock_…` (two) |
+| Interrupted cleanup | `An_interrupted_close_is_finished_by_recovery`, `A_worker_killed_while_undoing_a_refused_creation_is_reconciled`, CLI `An_interrupted_cleanup_is_finished_later_by_recovery` |
+| Open-file lock refusal | `A_busy_vault_stays_open_and_can_be_closed_later`, CLI `A_busy_vault_reports_6_and_stays_ready` |
+| Worker killed while provisioning | `A_worker_killed_during_provisioning_is_reconciled_to_a_retired_vault` (every step, before and after its effect) |
+| Two simultaneous closes | `Two_simultaneous_closes_…` (service and CLI) |
+| Stale mount or volume identity | `A_mount_folder_that_resolves_to_another_volume_blocks_cleanup`, `Recovery_removes_a_stale_mount_…`, `Recovery_refuses_an_image_whose_volume_identity_no_longer_matches_the_record` |
+| Interrupted disposal | `A_connection_lost_during_a_confirmed_shred_neither_stops_nor_repeats_it`, `A_lost_completion_is_reported_once_and_never_replayed` |
+
+Not covered even in simulation: killing a worker process mid-provisioning through the CLI
+(the simulator has no crash switch for a real process), and a UAC prompt answered with a
+different account.
+
 ## Requirements on the real provider
 
 The state machine relies on these. The simulator already behaves this way, so the tests

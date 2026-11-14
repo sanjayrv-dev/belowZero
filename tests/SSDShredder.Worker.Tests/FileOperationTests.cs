@@ -386,6 +386,52 @@ public class ConnectionSessionTests
         Assert.Equal(0, core.ActiveHolds);
     }
 
+    /// <summary>The other end goes away at a chosen event and stays gone.</summary>
+    private sealed class DroppingSink : IFrameSink
+    {
+        private readonly CapturingSink _inner;
+        private readonly string _marker;
+        private bool _gone;
+
+        public DroppingSink(CapturingSink inner, string marker)
+        {
+            _inner = inner;
+            _marker = marker;
+        }
+
+        public void Write(ReadOnlySpan<byte> line)
+        {
+            if (_gone || Encoding.UTF8.GetString(line).Contains(_marker))
+            {
+                _gone = true;
+                throw new IOException("the peer disconnected");
+            }
+            _inner.Write(line);
+        }
+    }
+
+    [Theory]
+    [InlineData("trimming")]
+    [InlineData("unlinking")]
+    public void A_connection_lost_during_a_confirmed_shred_neither_stops_nor_repeats_it(string lostAt)
+    {
+        var core = new SimulatedCore(_ => new SimScenario());
+        var sink = new CapturingSink();
+        var input = new Scripted(
+            () => Frames.Request(Frames.Id1, "inspect", Path, false),
+            () => Frames.Request(Frames.Id2, "shred", Path, true, TokenFrom(sink)),
+            () => Frames.Request(Frames.Id3, "inspect", Path, false));
+        var session = new ConnectionSession(input, new DroppingSink(sink, lostAt), new FileOperations(core), null);
+        session.Run();
+
+        // The disposal that was confirmed runs to its end exactly once, and nothing else runs.
+        Assert.Equal(1, core.TrimCalls);
+        Assert.Equal(1, core.UnlinkCalls);
+        Assert.Equal(0, core.ActiveHolds);
+        Assert.Equal(2, session.Executed);
+        Assert.DoesNotContain(sink.Lines, l => l.Contains(Frames.Id3));
+    }
+
     [Fact]
     public void Held_shred_emits_trimming_before_dispatch()
     {

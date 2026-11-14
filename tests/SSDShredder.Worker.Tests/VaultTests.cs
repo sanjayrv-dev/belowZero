@@ -283,6 +283,44 @@ public class VaultCloseTests
     }
 
     [Fact]
+    public void The_detach_route_fails_closed_when_the_reattached_disk_is_not_the_recorded_one()
+    {
+        using var f = new VaultFixture();
+        var (service, id, rec) = f.Ready(detachRoute: true);
+        f.Platform.Inject("lock", PlatformStatus.RecoveryKeyRequired);
+        f.Platform.Image(rec.BackingPath)!.GptDiskId = Guid.NewGuid().ToString("D");
+
+        VaultOutcome o = service.Close(id, VaultFixture.Owner);
+        Assert.Equal(ExitCode.Recovery, o.Code);
+        Assert.Equal(VaultPhases.Closing, o.Evidence.Phase);
+        Assert.Null(o.Evidence.LockedObserved);
+        Assert.NotNull(f.Platform.Image(rec.BackingPath));
+        Assert.False(f.Platform.Image(rec.BackingPath)!.Attached);
+        Assert.Equal(0, f.Platform.CallCount("delete"));
+    }
+
+    [Fact]
+    public void A_lock_refused_because_something_is_open_forces_nothing_and_can_be_retried()
+    {
+        using var f = new VaultFixture();
+        var (service, id, rec) = f.Ready();
+        f.Platform.Inject("lock", PlatformStatus.Busy);
+
+        VaultOutcome stuck = service.Close(id, VaultFixture.Owner);
+        Assert.Equal(ExitCode.Recovery, stuck.Code);
+        Assert.Equal(VaultPhases.Closing, stuck.Evidence.Phase);
+        Assert.Null(stuck.Evidence.Mount);
+        Assert.Null(stuck.Evidence.LockedObserved);
+        Assert.True(f.Platform.Image(rec.BackingPath)!.Attached);
+        Assert.Equal(0, f.Platform.CallCount("detach"));
+        Assert.Equal(0, f.Platform.CallCount("delete"));
+
+        VaultOutcome retry = service.Close(id, VaultFixture.Owner);
+        Assert.Equal(ExitCode.Completed, retry.Code);
+        Assert.True(retry.Evidence.LockedObserved);
+    }
+
+    [Fact]
     public void Closing_a_retired_vault_again_returns_the_same_receipt_without_touching_anything()
     {
         using var f = new VaultFixture();
@@ -362,8 +400,11 @@ public class VaultRecoveryTests
     [InlineData("attach", true)]
     [InlineData("format", false)]
     [InlineData("format", true)]
+    [InlineData("protect", false)]
     [InlineData("protect", true)]
+    [InlineData("encrypt", false)]
     [InlineData("encrypt", true)]
+    [InlineData("query", false)]
     [InlineData("query", true)]
     [InlineData("mount", false)]
     [InlineData("mount", true)]
@@ -385,6 +426,67 @@ public class VaultRecoveryTests
 
         // Recovery is idempotent: a second pass finds nothing to do.
         Assert.Empty(f.NewService().ReconcileAll());
+    }
+
+    [Theory]
+    [InlineData("detach")]
+    [InlineData("delete")]
+    public void A_worker_killed_while_undoing_a_refused_creation_is_reconciled(string step)
+    {
+        using var f = new VaultFixture();
+        f.Platform.Inject("protect", PlatformStatus.PolicyRefused);
+        f.Platform.InjectCrash(step, afterEffect: false);
+        Assert.Throws<SimulatedTerminationException>(() => f.NewService().Init(VaultFixture.Owner));
+        f.Platform.OwnerProcessExited();
+
+        VaultRecord before = f.Only();
+        Assert.Equal(VaultPhases.Creating, before.Phase);
+        Assert.Equal("rollback", before.Step);
+        Assert.False(before.StepDone);
+
+        VaultOutcome o = Assert.Single(f.NewService().ReconcileAll());
+        Assert.Equal(ExitCode.Completed, o.Code);
+        Assert.Equal(VaultPhases.Retired, o.Evidence.Phase);
+        Assert.Null(f.Platform.Image(before.BackingPath));
+        Assert.Equal(0, f.Platform.CallCount("mount"));
+        Assert.Empty(f.NewService().ReconcileAll());
+    }
+
+    [Fact]
+    public void Recovery_removes_a_stale_mount_that_still_resolves_to_the_recorded_volume()
+    {
+        using var f = new VaultFixture();
+        var (_, id, rec) = f.Ready();
+        f.Platform.OwnerProcessExited();
+        Assert.Equal(rec.VolumeGuid, f.Platform.Observe(rec).MountedVolumeGuid);
+
+        VaultOutcome o = f.NewService().Close(id, VaultFixture.Owner);
+        Assert.Equal(ExitCode.Completed, o.Code);
+        Assert.Equal(VaultPhases.Retired, o.Evidence.Phase);
+        Assert.Null(f.Platform.Observe(rec).MountedVolumeGuid);
+        Assert.Null(f.Platform.Image(rec.BackingPath));
+    }
+
+    [Theory]
+    [InlineData("volume")]
+    [InlineData("disk")]
+    public void Recovery_refuses_an_image_whose_volume_identity_no_longer_matches_the_record(string which)
+    {
+        using var f = new VaultFixture();
+        var (_, id, rec) = f.Ready();
+        f.Platform.OwnerProcessExited();
+        SimImage image = f.Platform.Image(rec.BackingPath)!;
+        if (which == "volume") image.VolumeGuid = @"\\?\Volume{00000000-0000-0000-0000-000000000002}\";
+        else image.GptDiskId = Guid.NewGuid().ToString("D");
+
+        VaultOutcome o = f.NewService().Close(id, VaultFixture.Owner);
+        Assert.Equal(ExitCode.Recovery, o.Code);
+        Assert.Equal(VaultPhases.Orphan, o.Evidence.Phase);
+        Assert.Null(o.Evidence.LockedObserved);
+        Assert.NotNull(f.Platform.Image(rec.BackingPath));
+        Assert.False(f.Platform.Image(rec.BackingPath)!.Attached);
+        Assert.Equal(0, f.Platform.CallCount("delete"));
+        Assert.Contains("lock state", f.Journal.Load(id)!.ReviewReason);
     }
 
     [Fact]

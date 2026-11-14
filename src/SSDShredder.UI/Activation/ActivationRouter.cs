@@ -134,9 +134,10 @@ public sealed class ActivationRouter : IAsyncDisposable
     {
         if (OperatingSystem.IsWindows())
         {
+            // CurrentUserOnly is mutually exclusive with an explicit PipeSecurity on Windows; the DACL below is the user restriction.
             return NamedPipeServerStreamAcl.Create(
                 _pipeName, PipeDirection.InOut, 1,
-                PipeTransmissionMode.Byte, PipeOptions.CurrentUserOnly,
+                PipeTransmissionMode.Byte, PipeOptions.Asynchronous,
                 inBufferSize: 0, outBufferSize: 0,
                 pipeSecurity: CreateCurrentUserOnlyPipeSecurity());
         }

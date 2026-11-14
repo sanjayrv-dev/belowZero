@@ -32,6 +32,12 @@
   one `shred` with the returned `selectionToken` on that same connection. Not written here:
   `SSDShredder.Worker.exe` is a `win-x64` binary and can't run on macOS even under Rosetta, so
   this couldn't be written *and verified* without a Windows machine.
+- Windows-only .NET API gotcha (UI): `PipeOptions.CurrentUserOnly` cannot be combined with an
+  explicit `PipeSecurity` — `NamedPipeServerStreamAcl.Create` throws `ArgumentException`. Use
+  `PipeOptions.Asynchronous` plus the explicit current-user DACL instead (fixed in
+  `ActivationRouter.CreateServerStream`; it only surfaced when `SSDShredder.UI.Tests` ran on real
+  Windows). Apply the same rule to the real worker-pipe client/server when wiring it. Run
+  `dotnet test` on Windows before merging UI pipe/ACL code.
 - Wire contract: `contracts/v1/` holds frozen JSON schemas, the exit-code map, and
   schema-checked examples (see `contracts/v1/README.md` for how they were checked and why
   `worker-event.schema.json` alone can't tell you which evidence shape applies).

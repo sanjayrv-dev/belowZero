@@ -38,36 +38,39 @@ regressions). `SSDShredder.UI` targets plain `net9.0` and fully builds, runs
 and tests cross-platform.
 
 `SSDShredder.ShellExtension` is native C++ and builds separately via CMake —
-see [its own README](src/SSDShredder.ShellExtension/README.md), including an
-explicit note that it hasn't been built or run yet (written without a
-Windows machine available).
+see [its own README](src/SSDShredder.ShellExtension/README.md). It compiles
+clean now (fixed in PR #1, the first time anyone built it on real Windows);
+installing, registering, and the Explorer/drop-target acceptance checks are
+still open.
 
-## Integration status
+## Integration status (first real Windows verification: 2026-11)
 
-All three engineers' work is merged into `main` and builds as one solution.
+All three engineers' work is merged into `main`.
 
-- **`SSDShredder.Worker` → `SSDShredder.Core`: wired, not yet verified on real hardware.**
+- **`SSDShredder.Worker` → `SSDShredder.Core`: wired and confirmed on real hardware.**
   `CoreFileDisposalAdapter` implements Worker's `IFileDisposalCore` over Core's
-  real `TrimEngine`/`FileInspector` (via an additive decomposition of
-  `HeldFile.Commit` into `RevalidateForCommit`/`TrimOnly`/`UnlinkOnly` — the
-  original, already hardware-verified `Commit()` is untouched). `WorkerEnvironment.Create()`
-  now uses it by default in real (non-simulated) mode. This was written and
-  reviewed without a Windows machine: both projects' existing test counts are
-  unchanged, the new tests for the decomposed methods fail the same
-  environment-only way the existing Windows-only ones do, and the adapter's
-  own pure mapping logic has 25 passing tests. **Run both test suites on real
-  Windows, then a live GUI inspect-then-shred pass on a disposable file,
-  before trusting this with real data.**
-- **`SSDShredder.UI` → `SSDShredder.Worker`: still simulated.** The UI runs
-  against `SimulatedWorkerClient`. The real protocol is precise and
-  fully specified (`src/SSDShredder.Worker/README.md`'s "Integration seams"
-  section, and now `contracts/v1/`): the UI must create a DACL'd named pipe
-  `SSDShredder.v1.<32 hex>`, launch `SSDShredder.Worker.exe --ipc <32 hex>
-  --parent-pid <ui pid>` unelevated, and send `inspect` then one `shred` with
-  the returned `selectionToken` on that same connection. `SSDShredder.Worker.exe`
-  is a `win-x64` binary and can't run on macOS at all (not even under
-  Rosetta — it's a Windows PE, not an x86-64 Mach-O), so this couldn't be
-  written *and verified* here; it's the one remaining integration seam.
+  real `TrimEngine`/`FileInspector`, via an additive decomposition of
+  `HeldFile.Commit` into `RevalidateForCommit`/`TrimOnly`/`UnlinkOnly` (the
+  original `Commit()` is untouched). On a real Windows 11 Pro machine: Core
+  73/73, Worker 204/204, and a real `--inspect`/`--shred --confirm` on a
+  disposable file correctly reports exit 7 (clean file-level-TRIM refusal) —
+  see `docs/ENGINEER1_OBSERVATIONS.md`'s "Test machine 2" for the full
+  readout. The *positive* path (a drive that actually accepts file-level
+  TRIM) still has zero coverage; two independent machines have now refused
+  it cleanly.
+- **`SSDShredder.UI` → `SSDShredder.Worker`: still simulated, and the UI's own
+  single-instance pipe had a real bug.** `ActivationRouter.CreateServerStream`
+  combined `PipeOptions.CurrentUserOnly` with an explicit `PipeSecurity`,
+  which Windows rejects — found by a real Windows run (3 failing
+  `ActivationRouterTests`, and a live second-instance hand-off that silently
+  didn't work). Fixed by dropping the custom `PipeSecurity` entirely and
+  relying on `CurrentUserOnly` alone, same on every platform; needs a real
+  Windows re-run to confirm. The UI itself still talks to
+  `SimulatedWorkerClient`, not a real `SSDShredder.Worker.exe` process — the
+  real protocol is specified in `src/SSDShredder.Worker/README.md`'s
+  "Integration seams" section and `contracts/v1/`, but `SSDShredder.Worker.exe`
+  is a `win-x64` binary that can't run on macOS even under Rosetta, so this
+  remains the one seam that couldn't be written *and verified* here.
 
 Both simulated paths are clearly labeled as such in the UI and worker output,
 so nothing in a demo or a test run can be mistaken for a real device result.

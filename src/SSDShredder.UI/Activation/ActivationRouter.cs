@@ -1,6 +1,4 @@
 using System.IO.Pipes;
-using System.Runtime.Versioning;
-using System.Security.Principal;
 using System.Text;
 using System.Text.Json;
 
@@ -132,31 +130,20 @@ public sealed class ActivationRouter : IAsyncDisposable
 
     private NamedPipeServerStream CreateServerStream()
     {
+        // PipeOptions.CurrentUserOnly already implies its own security descriptor —
+        // .NET rejects combining it with an explicit PipeSecurity (confirmed on real
+        // Windows: NamedPipeServerStreamAcl.Create with both throws). So this never
+        // builds a custom PipeSecurity at all; CurrentUserOnly alone, on the plain
+        // constructor, gives the same same-user restriction on every platform.
+        var options = PipeOptions.Asynchronous;
         if (OperatingSystem.IsWindows())
         {
-            return NamedPipeServerStreamAcl.Create(
-                _pipeName, PipeDirection.InOut, 1,
-                PipeTransmissionMode.Byte, PipeOptions.CurrentUserOnly,
-                inBufferSize: 0, outBufferSize: 0,
-                pipeSecurity: CreateCurrentUserOnlyPipeSecurity());
+            options |= PipeOptions.CurrentUserOnly;
         }
-
-        // Non-Windows development path: same-user local socket, no ACL/PID
-        // attestation. Fine for the macOS dev loop; the installed product
-        // only ships this router behind Windows' CurrentUserOnly guarantee.
+        // Non-Windows (the macOS dev loop): same-user local socket, no PID attestation —
+        // the installed product only ships this router behind Windows' CurrentUserOnly.
         return new NamedPipeServerStream(_pipeName, PipeDirection.InOut, 1,
-            PipeTransmissionMode.Byte, PipeOptions.Asynchronous, inBufferSize: 0, outBufferSize: 0);
-    }
-
-    [SupportedOSPlatform("windows")]
-    private static System.IO.Pipes.PipeSecurity CreateCurrentUserOnlyPipeSecurity()
-    {
-        var security = new System.IO.Pipes.PipeSecurity();
-        var identity = WindowsIdentity.GetCurrent().User
-            ?? throw new InvalidOperationException("No current Windows identity for pipe ACL.");
-        security.AddAccessRule(new System.IO.Pipes.PipeAccessRule(
-            identity, System.IO.Pipes.PipeAccessRights.ReadWrite, System.Security.AccessControl.AccessControlType.Allow));
-        return security;
+            PipeTransmissionMode.Byte, options, inBufferSize: 0, outBufferSize: 0);
     }
 
     private async Task HandleConnectionAsync(PipeStream connection, CancellationToken cancellationToken)

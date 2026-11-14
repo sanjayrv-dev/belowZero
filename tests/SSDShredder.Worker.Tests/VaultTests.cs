@@ -301,7 +301,7 @@ public class VaultCloseTests
     }
 
     [Fact]
-    public void Two_simultaneous_closes_run_one_transition_and_both_get_the_receipt()
+    public async Task Two_simultaneous_closes_run_one_transition_and_both_get_the_receipt()
     {
         using var f = new VaultFixture();
         var (service, id, _) = f.Ready();
@@ -313,7 +313,7 @@ public class VaultCloseTests
             return service.Close(id, VaultFixture.Owner);
         })).ToArray();
         start.Set();
-        Task.WaitAll(closers);
+        await Task.WhenAll(closers);
 
         Assert.All(closers, t => Assert.Equal(ExitCode.Completed, t.Result.Code));
         Assert.All(closers, t => Assert.Equal(VaultPhases.Retired, t.Result.Evidence.Phase));

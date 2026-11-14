@@ -41,7 +41,7 @@ internal static partial class Native
     internal const uint ShareAll = 7, OpenExisting = 3;
     internal const uint FileFlagOpenReparsePoint = 0x00200000, FileFlagBackupSemantics = 0x02000000;
 
-    internal const int FileStandardInfoClass = 1, FileStreamInfoClass = 7, FileIdInfoClass = 18, FileAttributeTagInfoClass = 35;
+    internal const int FileStandardInfoClass = 1, FileStreamInfoClass = 7, FileIdInfoClass = 18, FileAttributeTagInfoClass = 9;
     internal const uint AttrDirectory = 0x10, AttrSparse = 0x200, AttrReparse = 0x400, AttrCompressed = 0x800, AttrEncrypted = 0x4000;
 
     internal static readonly uint IoctlVolumeGetVolumeDiskExtents = CtlCode(0x56, 0, 0, 0); // 0x00560000

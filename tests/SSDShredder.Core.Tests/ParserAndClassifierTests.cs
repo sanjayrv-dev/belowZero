@@ -26,6 +26,16 @@ public class ParserAndClassifierTests
         Assert.Equal(0x002D1400u, Native.IoctlStorageQueryProperty);
     }
 
+    [Fact] public void FileInfoClasses_match_sdk_enum()
+    {
+        Assert.Equal(1, Native.FileStandardInfoClass);
+        Assert.Equal(4, Native.FileDispositionInfoClass);
+        Assert.Equal(7, Native.FileStreamInfoClass);
+        Assert.Equal(9, Native.FileAttributeTagInfoClass);
+        Assert.Equal(18, Native.FileIdInfoClass);
+        Assert.Equal(21, Native.FileDispositionInfoExClass);
+    }
+
     [Fact] public void Parses_extents()
     {
         var b = Buf(0, (2, 100), (5, 400));

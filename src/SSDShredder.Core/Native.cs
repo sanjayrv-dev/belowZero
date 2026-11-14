@@ -73,7 +73,8 @@ internal static partial class Native
     internal const int FileDispositionInfoClass = 4, FileDispositionInfoExClass = 21;
     internal const uint DispositionDelete = 0x1, DispositionPosix = 0x2;
     internal const int ErrorFileNotFound = 2, ErrorPathNotFound = 3, ErrorAccessDenied = 5,
-        ErrorSharingViolation = 32, ErrorLockViolation = 33, ErrorNotSupported = 50, ErrorInvalidFunction = 1;
+        ErrorSharingViolation = 32, ErrorLockViolation = 33, ErrorNotSupported = 50, ErrorInvalidFunction = 1,
+        ErrorNoRangesProcessed = 313, ErrorDeviceFeatureNotSupported = 317, ErrorFileLevelTrimNotSupported = 326;
 
     [LibraryImport("kernel32.dll", SetLastError = true)]
     internal static partial int FlushFileBuffers(SafeFileHandle h);

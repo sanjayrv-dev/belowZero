@@ -72,12 +72,14 @@ public class TrimEngineWindowsTests(ITestOutputHelper output)
         finally { File.Delete(path); }
     }
 
-    [Fact] public void Unsupported_error_is_a_clean_failure_and_leaves_file()
+    [Theory]
+    [InlineData(1)] [InlineData(50)] [InlineData(313)] [InlineData(317)] [InlineData(326)]
+    public void Unsupported_error_is_a_clean_failure_and_leaves_file(int win32)
     {
         var path = Temp(4096 * 2);
         try
         {
-            var r = new TrimEngine(new FakeSubmitter(new(1, 0, null)), null, ForceEligible).Shred(path, true);
+            var r = new TrimEngine(new FakeSubmitter(new(win32, 0, null)), null, ForceEligible).Shred(path, true);
             Assert.Equal(ShredState.Failed, r.State);
             Assert.True(File.Exists(path));
         }

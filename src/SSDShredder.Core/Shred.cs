@@ -128,8 +128,10 @@ public sealed class HeldFile : IDisposable
         uint requested = (uint)ranges.Count;
         var sub = _engine.Submitter.Submit(_handle, ranges);
 
-        if (sub.Win32Error is Native.ErrorInvalidFunction or Native.ErrorNotSupported)
-            return R(ShredState.Failed, "trim not supported by the stack; file left intact", req: requested);
+        // Refusals that mean nothing was processed: clean failure, no mutation, entry kept.
+        if (sub.Win32Error is Native.ErrorInvalidFunction or Native.ErrorNotSupported
+            or Native.ErrorNoRangesProcessed or Native.ErrorDeviceFeatureNotSupported or Native.ErrorFileLevelTrimNotSupported)
+            return R(ShredState.Failed, $"trim refused by the stack ({sub.Win32Error}); file left intact", req: requested, proc: 0);
         if (sub.Win32Error != 0)
             return R(ShredState.Indeterminate, $"trim failed ({sub.Win32Error}); file may have changed", req: requested);
         if (sub.RangesProcessed is null)

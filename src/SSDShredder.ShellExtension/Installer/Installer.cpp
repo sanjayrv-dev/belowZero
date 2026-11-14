@@ -15,6 +15,7 @@
 // executable's own directory (matching the layout UiLauncher.cpp guesses).
 
 #include <windows.h>
+#include <shlobj.h>
 #include <iostream>
 #include <filesystem>
 #include <string>

@@ -11,6 +11,7 @@
 #include <windows.h>
 #include <shlobj.h>
 #include <shobjidl_core.h>
+#include <shlwapi.h>
 
 #include <atomic>
 #include <filesystem>
@@ -114,7 +115,7 @@ bool HandOffPathToBroker(const std::wstring& brokerExePath, const std::wstring& 
 class ExplorerCommandImpl : public IExplorerCommand {
 public:
     ExplorerCommandImpl() { g_dllRefCount.fetch_add(1); }
-    ~ExplorerCommandImpl() override { g_dllRefCount.fetch_sub(1); }
+    virtual ~ExplorerCommandImpl() { g_dllRefCount.fetch_sub(1); }
 
     HRESULT STDMETHODCALLTYPE QueryInterface(REFIID riid, void** ppv) override {
         if (riid == IID_IUnknown || riid == IID_IExplorerCommand) {

@@ -45,7 +45,7 @@ std::atomic<LONG> g_objectCount{0};
 class DropTargetImpl : public IDropTarget {
 public:
     DropTargetImpl() { g_objectCount.fetch_add(1); }
-    ~DropTargetImpl() override { g_objectCount.fetch_sub(1); }
+    virtual ~DropTargetImpl() { g_objectCount.fetch_sub(1); }
 
     HRESULT STDMETHODCALLTYPE QueryInterface(REFIID riid, void** ppv) override {
         if (riid == IID_IUnknown || riid == IID_IDropTarget) {

@@ -42,6 +42,11 @@ public sealed class FileOperations
     public ExitCode InspectAndHold(string path, RequestEmitter emit, SelectionTokenStore store)
     {
         emit.Progress(Phases.Inspecting);
+
+        // A new inspect replaces whatever this connection held. Let go first: the old handle
+        // is exclusive, so inspecting the same file again would otherwise find it busy.
+        store.Release();
+
         AcquireResult a;
         try
         {

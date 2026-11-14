@@ -320,6 +320,118 @@ public class ConnectionSessionTests
         }
     }
 
+    private static List<System.Text.Json.JsonElement> Results(CapturingSink sink) =>
+        sink.Lines.Select(l => System.Text.Json.JsonDocument.Parse(l).RootElement)
+            .Where(e => e.GetProperty("type").GetString() == "result").ToList();
+
+    [Fact]
+    public void Inspecting_the_same_file_again_replaces_the_held_selection()
+    {
+        // The first inspect holds the file exclusively. A second inspect of that file on the
+        // same connection must give up the old hold first, or it locks itself out.
+        var core = new SimulatedCore(_ => new SimScenario());
+        var sink = new CapturingSink();
+        var input = new Scripted(
+            () => Frames.Request(Frames.Id1, "inspect", Path, false),
+            () => Frames.Request(Frames.Id2, "inspect", Path, false),
+            () => Frames.Request(Frames.Id3, "shred", Path, true,
+                Results(sink)[^1].GetProperty("evidence").GetProperty("selectionToken").GetString()));
+        new ConnectionSession(input, sink, new FileOperations(core), null).Run();
+
+        List<System.Text.Json.JsonElement> results = Results(sink);
+        Assert.Equal(3, results.Count);
+        Assert.Equal(0, results[1].GetProperty("code").GetInt32());
+        Assert.True(results[1].GetProperty("evidence").GetProperty("eligible").GetBoolean());
+        Assert.NotEqual(
+            results[0].GetProperty("evidence").GetProperty("selectionToken").GetString(),
+            results[1].GetProperty("evidence").GetProperty("selectionToken").GetString());
+        Assert.Equal(0, results[2].GetProperty("code").GetInt32());
+        Assert.Equal(1, core.UnlinkCalls);
+        Assert.Equal(0, core.ActiveHolds);
+    }
+
+    /// <summary>Fails in a way the emitter does not treat as a lost transport.</summary>
+    private sealed class FaultySink : IFrameSink
+    {
+        private readonly CapturingSink _inner;
+        private readonly string _marker;
+
+        public FaultySink(CapturingSink inner, string marker)
+        {
+            _inner = inner;
+            _marker = marker;
+        }
+
+        public void Write(ReadOnlySpan<byte> line)
+        {
+            if (Encoding.UTF8.GetString(line).Contains(_marker)) throw new NotSupportedException();
+            _inner.Write(line);
+        }
+    }
+
+    [Fact]
+    public void An_unexpected_error_after_the_trim_was_sent_is_indeterminate_not_a_plain_failure()
+    {
+        var core = new SimulatedCore(_ => new SimScenario());
+        var sink = new CapturingSink();
+        var input = new Scripted(
+            () => Frames.Request(Frames.Id1, "inspect", Path, false),
+            () => Frames.Request(Frames.Id2, "shred", Path, true, TokenFrom(sink)));
+        new ConnectionSession(input, new FaultySink(sink, "unlinking"), new FileOperations(core), null).Run();
+
+        Assert.Equal(1, core.TrimCalls);
+        Assert.Equal(0, core.UnlinkCalls);
+        Assert.Equal(Frames.Id2, sink.Last.GetProperty("id").GetString());
+        Assert.Equal(8, sink.Last.GetProperty("code").GetInt32());
+        Assert.Equal(0, core.ActiveHolds);
+    }
+
+    /// <summary>The other end goes away at a chosen event and stays gone.</summary>
+    private sealed class DroppingSink : IFrameSink
+    {
+        private readonly CapturingSink _inner;
+        private readonly string _marker;
+        private bool _gone;
+
+        public DroppingSink(CapturingSink inner, string marker)
+        {
+            _inner = inner;
+            _marker = marker;
+        }
+
+        public void Write(ReadOnlySpan<byte> line)
+        {
+            if (_gone || Encoding.UTF8.GetString(line).Contains(_marker))
+            {
+                _gone = true;
+                throw new IOException("the peer disconnected");
+            }
+            _inner.Write(line);
+        }
+    }
+
+    [Theory]
+    [InlineData("trimming")]
+    [InlineData("unlinking")]
+    public void A_connection_lost_during_a_confirmed_shred_neither_stops_nor_repeats_it(string lostAt)
+    {
+        var core = new SimulatedCore(_ => new SimScenario());
+        var sink = new CapturingSink();
+        var input = new Scripted(
+            () => Frames.Request(Frames.Id1, "inspect", Path, false),
+            () => Frames.Request(Frames.Id2, "shred", Path, true, TokenFrom(sink)),
+            () => Frames.Request(Frames.Id3, "inspect", Path, false));
+        var session = new ConnectionSession(input, new DroppingSink(sink, lostAt), new FileOperations(core), null);
+        session.Run();
+
+        // The disposal that was confirmed runs to its end exactly once, and nothing else runs.
+        Assert.Equal(1, core.TrimCalls);
+        Assert.Equal(1, core.UnlinkCalls);
+        Assert.Equal(0, core.ActiveHolds);
+        Assert.Equal(2, session.Executed);
+        Assert.DoesNotContain(sink.Lines, l => l.Contains(Frames.Id3));
+    }
+
     [Fact]
     public void Held_shred_emits_trimming_before_dispatch()
     {

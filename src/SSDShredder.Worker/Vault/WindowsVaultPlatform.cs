@@ -24,13 +24,41 @@ public sealed class WindowsVaultPlatform : IVaultPlatform
         }
     }
 
-    public PlatformResult CheckPrerequisites()
+    /// <summary>
+    /// Read-only checks that need no elevation: edition, the Virtual Disk API and the
+    /// BitLocker components. Null when this Windows could host a vault.
+    /// </summary>
+    public static string? MissingPlatformSupport()
     {
         string? edition = EditionId();
-        if (edition is not null && edition.StartsWith("Core", StringComparison.OrdinalIgnoreCase))
+        if (edition is null) return "the Windows edition could not be read";
+        if (edition.StartsWith("Core", StringComparison.OrdinalIgnoreCase))
         {
-            return new PlatformResult(PlatformStatus.Unsupported, "Windows Home cannot BitLocker-encrypt a new data volume");
+            return "Windows Home cannot BitLocker-encrypt a new data volume";
         }
+
+        string system = Environment.SystemDirectory;
+        if (!File.Exists(Path.Combine(system, "virtdisk.dll"))) return "the Virtual Disk API is not installed";
+        if (!File.Exists(Path.Combine(system, "fveapi.dll"))) return "BitLocker is not installed";
+        try
+        {
+            using RegistryKey? service = Registry.LocalMachine.OpenSubKey(@"SYSTEM\CurrentControlSet\Services\BDESVC");
+            if (service is null) return "the BitLocker service is not installed";
+        }
+        catch (Exception e) when (e is System.Security.SecurityException or UnauthorizedAccessException or IOException)
+        {
+            return "the BitLocker service could not be checked";
+        }
+        return null;
+    }
+
+    public PlatformResult CheckPrerequisites()
+    {
+        string? missing = MissingPlatformSupport();
+        if (missing is not null) return new PlatformResult(PlatformStatus.Unsupported, missing);
+
+        // The platform could do it, but the provider below is still a stub. Passing here
+        // would let a creation journal a record that nothing can observe or undo.
         return new PlatformResult(PlatformStatus.Unsupported, NotBuilt);
     }
 
@@ -88,5 +116,9 @@ public sealed class WindowsVaultPlatform : IVaultPlatform
 
     public PlatformResult DeleteBackingFile(string path, string expectedFileId) => No;
 
-    public Observation Observe(VaultRecord record) => new(false, null, null, null, null);
+    /// <summary>
+    /// This provider cannot look, and "cannot look" must not read as "nothing is left":
+    /// recovery retires a record when it observes no backing file and no mount.
+    /// </summary>
+    public Observation Observe(VaultRecord record) => throw new NotSupportedException(NotBuilt);
 }

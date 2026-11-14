@@ -60,6 +60,50 @@ public class CliHostTests
     }
 }
 
+public class RealModeGateTests
+{
+    private static WorkerEnvironment Real(TempDir dir) => new()
+    {
+        Simulated = false,
+        Core = new SimulatedCore(_ => null),
+        CoreAvailable = false,
+        Platform = new WindowsVaultPlatform(),
+        Journal = new VaultJournal(Path.Combine(dir.Path, "journal")),
+        Options = new VaultOptions { ImageDirectory = dir.Path, MountRoot = dir.Path },
+        RequestPipePrefix = "SSDShredder.test.",
+        OwnerPipePrefix = "SSDShredder.test.owner.",
+    };
+
+    [Theory]
+    [InlineData(Verb.VaultInit)]
+    [InlineData(Verb.VaultClose)]
+    public void While_the_real_provider_is_a_stub_creation_and_close_are_refused_before_any_consent_prompt(Verb verb)
+    {
+        using var dir = new TempDir();
+        using var stdout = new MemoryStream();
+        var stderr = new StringWriter();
+        string? vault = verb == Verb.VaultInit ? null : Frames.Id3;
+
+        ExitCode code = CliHost.Run(
+            new ParsedCommand(verb, VaultId: vault, Confirm: true),
+            Real(dir), stdout, new StringReader(""), stderr, interactive: false);
+
+        // Reaching the launcher would show a UAC prompt and hang this test.
+        Assert.Equal(ExitCode.Unsupported, code);
+        Assert.Contains("\"code\":4", Encoding.UTF8.GetString(stdout.ToArray()));
+        Assert.Contains("Vaults are unavailable", stderr.ToString());
+        Assert.False(Directory.Exists(Path.Combine(dir.Path, "journal")));
+    }
+
+    [Fact]
+    public void The_stub_provider_never_passes_its_own_prerequisite_check()
+    {
+        PlatformResult r = new WindowsVaultPlatform().CheckPrerequisites();
+        Assert.Equal(PlatformStatus.Unsupported, r.Status);
+        Assert.False(string.IsNullOrEmpty(r.Detail));
+    }
+}
+
 public class OwnerHostTests
 {
     private static NamedPipeClientStream Connect(string pipe)

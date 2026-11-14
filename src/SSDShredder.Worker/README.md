@@ -35,8 +35,11 @@ SSDShredder.Worker --vault-close <vault-uuid> --confirm
 | `SSDSHREDDER_SIM_OPTIN=1` | Recovery may retire a verified orphan |
 | `SSDSHREDDER_SIM_DETACH_ROUTE=1` | Allow the detach/reattach close route |
 
-Without the variable the build is in real mode: file verbs and vault verbs both end with
-exit 4, and nothing is touched.
+Without the variable the build is in real mode. File verbs, `--vault-init` and
+`--vault-close` end with exit 4 before any consent prompt, and nothing is touched: the
+prerequisite check now tests the edition, the Virtual Disk API and the BitLocker
+components, and then still refuses because the provider is a stub. `--vault-status` only
+reads the journal, so it does ask for consent and runs in an elevated helper.
 
 ## Layout
 
@@ -155,7 +158,14 @@ cannot catch a real provider that does not.
 
 - `Vault/WindowsVaultPlatform.cs`: real VHDX create/attach, GPT/NTFS, BitLocker WMI, mount,
   lock, detach, identity checks. Every method currently returns "unsupported".
-- A real UAC consent run (`runas`), including decline (1223) and a different-account prompt.
+- A real UAC consent run (`runas`) for decline (1223) and a different-account prompt.
+  The accept case was run on Windows 11 Pro 26300.9974 (one admin account, default UAC
+  settings, worker in a user-writable build folder): real-mode `--vault-status` with an
+  unknown vault ID was accepted at the prompt three times and each time the elevated
+  helper answered code 5 with `phase: unknown` evidence. So the launcher's pipe ACL and
+  both peer checks work across elevation for launcher to helper. Nothing was created.
+  Still not run: decline, a different account, and an unelevated client talking to an
+  elevated session owner (no real owner can exist until the provider is built).
   An unelevated client reading an elevated owner's token user has not been exercised end
   to end. A read-only check on Windows 11 Home 26200 (one admin account, split token)
   found that the limited and the elevated token carry the same logon SID, and that a

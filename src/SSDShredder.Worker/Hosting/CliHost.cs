@@ -131,7 +131,8 @@ public static class CliHost
     /// <summary>Runs a vault request in a helper process: elevated for real, as-is when simulated.</summary>
     private static ExitCode ViaHelper(WireRequest request, WorkerEnvironment env, IFrameSink sink, RequestEmitter emit, TextWriter stderr)
     {
-        if (!env.Simulated)
+        // Status only reads the journal, so it does not depend on what the platform can do.
+        if (!env.Simulated && request.Op != Ops.VaultStatus)
         {
             // Refuse before asking for consent when the platform cannot do it anyway.
             PlatformResult pre = env.Platform.CheckPrerequisites();

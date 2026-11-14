@@ -34,3 +34,35 @@ internal static partial class Native
     [StructLayout(LayoutKind.Sequential)] internal struct TrimOutput { public uint NumRangesProcessed; }
     [StructLayout(LayoutKind.Sequential)] internal struct DeviceTrimDescriptor { public uint Version, Size; public byte TrimEnabled; }
 }
+
+internal static partial class Native
+{
+    internal const uint GenericRead = 0x80000000, FileReadAttributes = 0x80;
+    internal const uint ShareAll = 7, OpenExisting = 3;
+    internal const uint FileFlagOpenReparsePoint = 0x00200000, FileFlagBackupSemantics = 0x02000000;
+
+    internal const int FileStandardInfoClass = 1, FileStreamInfoClass = 7, FileIdInfoClass = 18, FileAttributeTagInfoClass = 35;
+    internal const uint AttrDirectory = 0x10, AttrSparse = 0x200, AttrReparse = 0x400, AttrCompressed = 0x800, AttrEncrypted = 0x4000;
+
+    internal static readonly uint IoctlVolumeGetVolumeDiskExtents = CtlCode(0x56, 0, 0, 0); // 0x00560000
+    internal const uint PropDevice = 0, PropSeekPenalty = 7, PropTrim = 8;
+
+    [LibraryImport("kernel32.dll", EntryPoint = "CreateFileW", StringMarshalling = StringMarshalling.Utf16, SetLastError = true)]
+    internal static partial SafeFileHandle CreateFile(string name, uint access, uint share, nint security, uint disposition, uint flags, nint template);
+
+    [LibraryImport("kernel32.dll", SetLastError = true)]
+    internal static partial int GetFileInformationByHandleEx(SafeFileHandle h, int infoClass, nint buffer, uint size);
+
+    [LibraryImport("kernel32.dll", EntryPoint = "GetFinalPathNameByHandleW", StringMarshalling = StringMarshalling.Utf16, SetLastError = true)]
+    internal static partial uint GetFinalPathNameByHandle(SafeFileHandle h, [Out] char[] buffer, uint length, uint flags);
+
+    [LibraryImport("kernel32.dll", EntryPoint = "GetVolumeInformationByHandleW", StringMarshalling = StringMarshalling.Utf16, SetLastError = true)]
+    internal static partial int GetVolumeInformationByHandle(SafeFileHandle h, nint volName, uint volNameLen,
+        out uint serial, out uint maxComponent, out uint flags, [Out] char[] fsName, uint fsNameLen);
+
+    [LibraryImport("kernel32.dll", EntryPoint = "GetDiskFreeSpaceW", StringMarshalling = StringMarshalling.Utf16, SetLastError = true)]
+    internal static partial int GetDiskFreeSpace(string root, out uint sectorsPerCluster, out uint bytesPerSector, out uint freeClusters, out uint totalClusters);
+
+    [LibraryImport("kernel32.dll")]
+    internal static unsafe partial void GetSystemInfo(byte* systemInfo);
+}

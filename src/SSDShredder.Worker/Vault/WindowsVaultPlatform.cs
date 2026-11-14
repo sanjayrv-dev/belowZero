@@ -88,5 +88,9 @@ public sealed class WindowsVaultPlatform : IVaultPlatform
 
     public PlatformResult DeleteBackingFile(string path, string expectedFileId) => No;
 
-    public Observation Observe(VaultRecord record) => new(false, null, null, null, null);
+    /// <summary>
+    /// This provider cannot look, and "cannot look" must not read as "nothing is left":
+    /// recovery retires a record when it observes no backing file and no mount.
+    /// </summary>
+    public Observation Observe(VaultRecord record) => throw new NotSupportedException(NotBuilt);
 }

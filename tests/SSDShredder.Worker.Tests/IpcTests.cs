@@ -30,13 +30,13 @@ public class PipeTests
     }
 
     [Fact]
-    public void Both_ends_verify_pid_user_image_and_session()
+    public async Task Both_ends_verify_pid_user_image_and_session()
     {
         string name = NewName();
         using NamedPipeServerStream server = PipeEndpoints.CreateServer(name);
         Task<NamedPipeClientStream?> connecting = Task.Run(() => PipeEndpoints.Connect(name, 5000));
         Assert.True(PipeEndpoints.WaitForConnection(server, TimeSpan.FromSeconds(5)));
-        using NamedPipeClientStream client = connecting.Result!;
+        using NamedPipeClientStream client = (await connecting)!;
 
         uint me = (uint)Environment.ProcessId;
         PeerExpectation right = PeerVerifier.SelfPeer(me, exactImage: true);
@@ -65,7 +65,7 @@ public class PipeTests
     }
 
     [Fact]
-    public void A_request_travels_over_the_pipe_and_its_events_are_relayed()
+    public async Task A_request_travels_over_the_pipe_and_its_events_are_relayed()
     {
         string name = NewName();
         using NamedPipeServerStream server = PipeEndpoints.CreateServer(name);
@@ -83,7 +83,7 @@ public class PipeTests
         using NamedPipeClientStream client = PipeEndpoints.Connect(name, 5000)!;
         var sink = new CapturingSink();
         ExitCode code = HelperLauncher.RunOver(client, new WireRequest(Frames.Id2, Ops.VaultClose, Frames.Id3, true, null), sink);
-        serving.Wait(5000);
+        await serving.WaitAsync(TimeSpan.FromSeconds(5));
 
         Assert.Equal(ExitCode.Completed, code);
         Assert.Equal(2, sink.Lines.Count);
@@ -383,13 +383,13 @@ public sealed class EndToEndTests : IDisposable
     }
 
     [Fact]
-    public void Two_simultaneous_closes_both_end_with_the_retired_receipt()
+    public async Task Two_simultaneous_closes_both_end_with_the_retired_receipt()
     {
         string id = Run(["--vault-init"]).Evidence.GetProperty("vaultId").GetString()!;
-        Task<RunResult>[] closers = [.. Enumerable.Range(0, 2).Select(_ => Task.Run(() => Run(["--vault-close", id, "--confirm"])))];
-        Task.WaitAll(closers);
-        Assert.All(closers, t => Assert.True(t.Result.ExitCode == 0, t.Result.Stderr + string.Join("\n", t.Result.Events)));
-        Assert.All(closers, t => Assert.Equal("retired", t.Result.Evidence.GetProperty("phase").GetString()));
+        RunResult[] closed = await Task.WhenAll(
+            Enumerable.Range(0, 2).Select(_ => Task.Run(() => Run(["--vault-close", id, "--confirm"]))));
+        Assert.All(closed, r => Assert.True(r.ExitCode == 0, r.Stderr + string.Join("\n", r.Events)));
+        Assert.All(closed, r => Assert.Equal("retired", r.Evidence.GetProperty("phase").GetString()));
     }
 
     [Theory]

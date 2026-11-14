@@ -66,3 +66,18 @@ internal static partial class Native
     [LibraryImport("kernel32.dll")]
     internal static unsafe partial void GetSystemInfo(byte* systemInfo);
 }
+
+internal static partial class Native
+{
+    internal const uint GenericWrite = 0x40000000, Delete = 0x00010000;
+    internal const int FileDispositionInfoClass = 4, FileDispositionInfoExClass = 21;
+    internal const uint DispositionDelete = 0x1, DispositionPosix = 0x2;
+    internal const int ErrorFileNotFound = 2, ErrorPathNotFound = 3, ErrorAccessDenied = 5,
+        ErrorSharingViolation = 32, ErrorLockViolation = 33, ErrorNotSupported = 50, ErrorInvalidFunction = 1;
+
+    [LibraryImport("kernel32.dll", SetLastError = true)]
+    internal static partial int FlushFileBuffers(SafeFileHandle h);
+
+    [LibraryImport("kernel32.dll", SetLastError = true)]
+    internal static partial int SetFileInformationByHandle(SafeFileHandle h, int infoClass, nint buffer, uint size);
+}

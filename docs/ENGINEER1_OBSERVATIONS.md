@@ -35,6 +35,11 @@ Observed results only. Expected behaviour lives in docs/01 and docs/02.
 - Sizing: len=600 already reported `NoFullPage` (non-resident, first non-resident length observed: 600), versus resident up to 600 on machine 1. 4096 and up eligible, same as machine 1. The resident threshold varies by machine.
 - Conclusion: a second NVMe model (WD SN5000S) on a similar Windows build also refuses file-level TRIM with 326, matching machine 1 (Samsung BM9C1, 10.0.26300).
 
+## Cross-machine summary and decision
+- Two NVMe models (Samsung BM9C1, WD SN5000S) on Windows 10.0.26300 and 10.0.26200 both return 326 ("Device does not support file-level TRIM") for every request shape tried. The request layout matches docs/01; a malformed request would be expected to give 87, not 326.
+- Decision (v1): **clean refusal.** When file-level TRIM is refused (313/317/326) the executor reports Failed (exit 7), leaves the file and entry in place, and nothing is unlinked. Workers and UI must treat this as an expected result on common laptop NVMe, not an error condition. `WorkerFixtures.Unsupported` and `Partial` model the refusal and partial cases.
+- Open: whether any local stack accepts file-level TRIM (SATA SSD, thin-provisioned virtual disk, Storage Spaces are candidates; unverified).
+
 ## Not yet run
 - Positive TRIM acknowledgement on real hardware (needs a device whose stack accepts file-level TRIM; try another NVMe or a SATA SSD).
 - Unknown-bridge/USB fallback on real hardware, ACL-denied target, sparse/linked fixtures on disk.

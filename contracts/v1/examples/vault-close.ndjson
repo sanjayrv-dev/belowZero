@@ -1,0 +1,2 @@
+{"v":1,"id":"549556c4-3919-4ac7-bba8-e88d46ba6095","op":"vault-close","target":"31f4fcad-b324-4058-a522-da3c7c443523","confirmed":true}
+{"v":1,"id":"549556c4-3919-4ac7-bba8-e88d46ba6095","seq":1,"type":"result","code":0,"state":"completed","evidence":{"vaultId":"31f4fcad-b324-4058-a522-da3c7c443523","phase":"retired","mount":null,"lockedObserved":true}}

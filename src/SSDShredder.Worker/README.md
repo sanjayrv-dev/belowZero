@@ -53,9 +53,16 @@ exit 4, and nothing is touched.
 
 ## Integration seams
 
-- **Core (Engineer 1).** Implement `CoreAdapter/IFileDisposalCore` over the real Core and
-  return it from `WorkerEnvironment.Create()` with `CoreAvailable = true`. The Worker
-  decides the exit code. Core reports facts: eligibility, trim status, ranges, entry outcome.
+- **Core (Engineer 1). Done, not yet verified on real hardware.**
+  `CoreAdapter/CoreFileDisposalAdapter.cs` implements `IFileDisposalCore` over the real Core
+  (its `TrimEngine`/`FileInspector`, plus three new additive methods on `HeldFile` —
+  `RevalidateForCommit`/`TrimOnly`/`UnlinkOnly` — that mirror the already hardware-verified
+  `Commit()` without changing it), and `WorkerEnvironment.Create()`'s real-mode branch now
+  returns it with `CoreAvailable = true`. This was written and reviewed without a Windows
+  machine available: `dotnet test` on both `SSDShredder.Core.Tests` and
+  `SSDShredder.Worker.Tests` needs to actually pass on Windows, and a live GUI
+  inspect-then-shred pass on a disposable file needs to happen, before trusting this with
+  real data. `SSDSHREDDER_SIMULATE=1` is still there as a fallback if it misbehaves.
 - **UI (Engineer 3).** For file disposal, create a pipe named `SSDShredder.v1.<32 hex>`,
   start `SSDShredder.Worker --ipc <32 hex> --parent-pid <ui pid>` unelevated, send `inspect`,
   then one `shred` with the returned `selectionToken` on the same connection. The pipe name

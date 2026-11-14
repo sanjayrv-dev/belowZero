@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://belowzero/contracts/v1/activation-ack.schema.json",
+  "title": "UI activation acknowledgement v1",
+  "description": "Same version/id as the envelope it answers, plus accepted. Implemented in SSDShredder.UI.Activation.ActivationAck.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["v", "id", "accepted"],
+  "properties": {
+    "v": { "const": 1 },
+    "id": { "type": "string", "format": "uuid" },
+    "accepted": { "type": "boolean" }
+  }
+}

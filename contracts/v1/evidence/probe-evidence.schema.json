@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://belowzero/contracts/v1/evidence/probe-evidence.schema.json",
+  "title": "Probe evidence v1",
+  "description": "Result evidence for the private op=probe-volume verb. SSDShredder.Worker.Protocol.ProbeEvidence. Unknown facts are null.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["volumeGuid", "deviceCount", "bus", "trimEnabled", "seekPenalty"],
+  "properties": {
+    "volumeGuid": { "type": "string" },
+    "deviceCount": { "type": ["integer", "null"], "minimum": 0 },
+    "bus": { "type": ["string", "null"] },
+    "trimEnabled": { "type": ["boolean", "null"] },
+    "seekPenalty": { "type": ["boolean", "null"] }
+  }
+}

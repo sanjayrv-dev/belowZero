@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://belowzero/contracts/v1/evidence/shred-evidence.schema.json",
+  "title": "Shred evidence v1",
+  "description": "Result evidence for an op=shred request. SSDShredder.Worker.Protocol.ShredEvidence. Report removal only after a successful disposition, handle close and verification that the confirmed identity no longer occupies the selected name.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["rangesRequested", "rangesProcessed", "coveredBytes", "tailBytes", "entry"],
+  "properties": {
+    "rangesRequested": { "type": ["integer", "null"], "minimum": 0 },
+    "rangesProcessed": { "type": ["integer", "null"], "minimum": 0 },
+    "coveredBytes": { "type": ["integer", "null"], "minimum": 0 },
+    "tailBytes": { "type": ["integer", "null"], "minimum": 0 },
+    "entry": { "enum": ["preserved", "removed", "unknown"] }
+  }
+}

@@ -1,0 +1,4 @@
+{"v":1,"id":"7f8e9d0c-1b2a-4394-8f5e-6d7c8b9a0e1f","op":"vault-init","target":null,"confirmed":false}
+{"v":1,"id":"7f8e9d0c-1b2a-4394-8f5e-6d7c8b9a0e1f","seq":1,"type":"progress","phase":"creating"}
+{"v":1,"id":"7f8e9d0c-1b2a-4394-8f5e-6d7c8b9a0e1f","seq":2,"type":"progress","phase":"encrypting"}
+{"v":1,"id":"7f8e9d0c-1b2a-4394-8f5e-6d7c8b9a0e1f","seq":3,"type":"result","code":0,"state":"completed","evidence":{"vaultId":"31f4fcad-b324-4058-a522-da3c7c443523","phase":"ready","mount":"C:\\Users\\demo\\belowZero\\vault-31f4","lockedObserved":false,"conversion":"fullyEncrypted","protectionOn":true,"protectorTypes":[8],"autoUnlock":false,"encryptionMethod":7}}

@@ -1,0 +1,3 @@
+{"v":1,"id":"a1b2c3d4-5e6f-4789-a0b1-c2d3e4f5a6b7","op":"inspect","target":"C:\\Demo\\locked.bin","confirmed":false}
+{"v":1,"id":"a1b2c3d4-5e6f-4789-a0b1-c2d3e4f5a6b7","seq":1,"type":"progress","phase":"inspecting"}
+{"v":1,"id":"a1b2c3d4-5e6f-4789-a0b1-c2d3e4f5a6b7","seq":2,"type":"result","code":6,"state":"busy","evidence":{"eligible":false,"reason":"unknown","bus":null,"coveredBytes":null,"tailBytes":null}}

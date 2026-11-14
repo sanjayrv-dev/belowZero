@@ -16,7 +16,7 @@ SSDShredder.sln
 │   ├── SSDShredder.UI/               net9.0 · Avalonia bin panel, confirmation, status, picker (Engineer 3)
 │   └── SSDShredder.ShellExtension/   native C++ (CMake) · desktop broker, Explorer command, installer (Engineer 3)
 ├── tests/                            one *.Tests project per src project above
-├── contracts/                        reserved for v1 JSON schemas/examples (not yet populated)
+├── contracts/v1/                     frozen JSON schemas, exit-code map, and schema-checked examples for the wire protocol
 └── docs/                             research, architecture, build plan, demo playbook, Engineer 1's hardware notes
 ```
 
@@ -45,18 +45,29 @@ Windows machine available).
 ## Integration status
 
 All three engineers' work is merged into `main` and builds as one solution.
-Two integration seams are intentionally left for a Windows-equipped follow-up
-rather than wired blind:
 
-- **`SSDShredder.Worker` → `SSDShredder.Core`.** The worker currently runs
-  against `Simulation.SimulatedCore`; wiring a real `IFileDisposalCore`
-  adapter over Core's `TrimEngine`/`FileInspector` needs a Windows machine to
-  verify against the fault-injection tests both projects already have.
-- **`SSDShredder.UI` → `SSDShredder.Worker`.** The UI currently runs against
-  `SimulatedWorkerClient`. `SSDShredder.Worker.exe` is a `win-x64` binary and
-  can't be executed on macOS (not even under Rosetta — it's a Windows PE, not
-  an x86-64 Mach-O), so a real process-launching client couldn't be verified
-  here either.
+- **`SSDShredder.Worker` → `SSDShredder.Core`: wired, not yet verified on real hardware.**
+  `CoreFileDisposalAdapter` implements Worker's `IFileDisposalCore` over Core's
+  real `TrimEngine`/`FileInspector` (via an additive decomposition of
+  `HeldFile.Commit` into `RevalidateForCommit`/`TrimOnly`/`UnlinkOnly` — the
+  original, already hardware-verified `Commit()` is untouched). `WorkerEnvironment.Create()`
+  now uses it by default in real (non-simulated) mode. This was written and
+  reviewed without a Windows machine: both projects' existing test counts are
+  unchanged, the new tests for the decomposed methods fail the same
+  environment-only way the existing Windows-only ones do, and the adapter's
+  own pure mapping logic has 25 passing tests. **Run both test suites on real
+  Windows, then a live GUI inspect-then-shred pass on a disposable file,
+  before trusting this with real data.**
+- **`SSDShredder.UI` → `SSDShredder.Worker`: still simulated.** The UI runs
+  against `SimulatedWorkerClient`. The real protocol is precise and
+  fully specified (`src/SSDShredder.Worker/README.md`'s "Integration seams"
+  section, and now `contracts/v1/`): the UI must create a DACL'd named pipe
+  `SSDShredder.v1.<32 hex>`, launch `SSDShredder.Worker.exe --ipc <32 hex>
+  --parent-pid <ui pid>` unelevated, and send `inspect` then one `shred` with
+  the returned `selectionToken` on that same connection. `SSDShredder.Worker.exe`
+  is a `win-x64` binary and can't run on macOS at all (not even under
+  Rosetta — it's a Windows PE, not an x86-64 Mach-O), so this couldn't be
+  written *and verified* here; it's the one remaining integration seam.
 
 Both simulated paths are clearly labeled as such in the UI and worker output,
 so nothing in a demo or a test run can be mistaken for a real device result.

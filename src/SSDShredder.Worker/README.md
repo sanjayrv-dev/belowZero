@@ -66,7 +66,16 @@ reads the journal, so it does ask for consent and runs in an elevated helper.
   `SSDShredder.Worker.Tests` needs to actually pass on Windows, and a live GUI
   inspect-then-shred pass on a disposable file needs to happen, before trusting this with
   real data. `SSDSHREDDER_SIMULATE=1` is still there as a fallback if it misbehaves.
-- **UI (Engineer 3).** For file disposal, create a pipe named `SSDShredder.v1.<32 hex>`,
+- **UI (Engineer 3). Written, not yet verified on real hardware.**
+  `SSDShredder.UI/Worker/ProcessWorkerClient.cs` implements this now (opt-in behind
+  `SSDSHREDDER_REAL_WORKER=1`; `SimulatedWorkerClient` stays the default until this is
+  confirmed). The pipe DACL mirrors `PipeEndpoints.CreateServer` above exactly, not
+  `PipeOptions.CurrentUserOnly` (that combination is what broke `ActivationRouter` and is
+  deliberately not repeated here). Needs a real Windows run — ideally with
+  `SSDShredder.UI.exe` and `SSDShredder.Worker.exe` actually installed side by side per the
+  real-mode peer check described below — before trusting it with real data.
+
+  For file disposal, create a pipe named `SSDShredder.v1.<32 hex>`,
   start `SSDShredder.Worker --ipc <32 hex> --parent-pid <ui pid>` unelevated, send `inspect`,
   then one `shred` with the returned `selectionToken` on the same connection. The pipe name
   is the same in simulated and real mode. The worker checks that the pipe server is its

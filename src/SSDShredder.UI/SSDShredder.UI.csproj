@@ -32,4 +32,8 @@
     <AvaloniaResource Include="Assets\**" />
   </ItemGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="SSDShredder.UI.Tests" />
+  </ItemGroup>
+
 </Project>

@@ -28,7 +28,7 @@ public partial class App : Avalonia.Application
             // envelope to the window it is about to create.
             var startupEnvelope = ParseStartupArgs(desktop.Args ?? []);
 
-            _viewModel = new BinViewModel(new SimulatedWorkerClient(), new AvaloniaFilePickerService(() => _window!));
+            _viewModel = new BinViewModel(CreateWorkerClient(), new AvaloniaFilePickerService(() => _window!));
             _window = new BinWindow { DataContext = _viewModel };
             PositionNearScreenCorner(_window);
             desktop.MainWindow = _window;
@@ -87,6 +87,34 @@ public partial class App : Avalonia.Application
                 await _viewModel.RequestSelectionAsync(envelope.Paths[0], source);
             }
         });
+    }
+
+    /// <summary>
+    /// SSDSHREDDER_REAL_WORKER=1 on Windows opts into the real ProcessWorkerClient
+    /// (launches SSDShredder.Worker.exe and speaks the real protocol) instead of
+    /// the default, demo-safe SimulatedWorkerClient. Written and reviewed without
+    /// a Windows machine available — see ProcessWorkerClient.cs's own header
+    /// before trusting it with real data. Falls back to simulated, with a clear
+    /// stderr message, if the opt-in is set but the worker can't be found (e.g.
+    /// it isn't installed next to this UI yet).
+    /// </summary>
+    private static IWorkerClient CreateWorkerClient()
+    {
+        bool wantsReal = Environment.GetEnvironmentVariable("SSDSHREDDER_REAL_WORKER") == "1";
+        if (wantsReal && OperatingSystem.IsWindows())
+        {
+            try
+            {
+                ProcessWorkerClient.ResolveWorkerExecutablePath(); // throws early, before committing to it
+                return new ProcessWorkerClient();
+            }
+            catch (FileNotFoundException ex)
+            {
+                Console.Error.WriteLine($"SSDSHREDDER_REAL_WORKER=1 but {ex.Message} Falling back to the simulated worker.");
+            }
+        }
+
+        return new SimulatedWorkerClient();
     }
 
     private static void PositionNearScreenCorner(Window window)

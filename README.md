@@ -65,13 +65,22 @@ warnings.
   the custom `PipeSecurity` entirely and relying on `CurrentUserOnly` alone.
   On real Windows: all `ActivationRouterTests` pass, and a second launch
   hands off to the first and exits in ~340ms.
-- **`SSDShredder.UI` → `SSDShredder.Worker`: still simulated.** The UI talks
-  to `SimulatedWorkerClient`, not a real `SSDShredder.Worker.exe` process —
-  the real protocol is specified in `src/SSDShredder.Worker/README.md`'s
-  "Integration seams" section and `contracts/v1/`, but `SSDShredder.Worker.exe`
-  is a `win-x64` binary that can't run on macOS even under Rosetta, so this
-  remains the one seam that couldn't be written *and verified* here. This is
-  the last real integration gap.
+- **`SSDShredder.UI` → `SSDShredder.Worker`: written, not yet verified.**
+  `ProcessWorkerClient` launches `SSDShredder.Worker.exe --ipc <suffix>
+  --parent-pid <ui pid>` unelevated and speaks the real protocol over a
+  DACL'd pipe it creates first (mirroring Worker's own
+  `PipeEndpoints.CreateServer` exactly — not the `PipeOptions.CurrentUserOnly`
+  pattern that caused the ActivationRouter bug above). It's **opt-in**,
+  behind `SSDSHREDDER_REAL_WORKER=1` on Windows; the default stays
+  `SimulatedWorkerClient` until this is confirmed on real hardware.
+  `SSDShredder.Worker.exe` is a `win-x64` binary that can't run on macOS even
+  under Rosetta, so this couldn't be written *and verified* here — the pure
+  wire-mapping logic (46 tests, `WireMappingTests.cs`) is fully verified; the
+  pipe/process plumbing is not. **Needs real mode's peer check too:
+  `SSDShredder.UI.exe` and `SSDShredder.Worker.exe` must be installed in the
+  same directory** (Worker's own peer verification requires it) — on a dev
+  build with separate `bin/Debug` output folders, set `SSDSHREDDER_WORKER_PATH`
+  to point at the Worker executable directly.
 
 Both simulated paths are clearly labeled as such in the UI and worker output,
 so nothing in a demo or a test run can be mistaken for a real device result.

@@ -18,26 +18,35 @@
   metadata, unlink only after all planned trim ranges succeed.
 - Worker rules (`SSDShredder.Worker`): own the NDJSON wire contract and exit codes exactly as
   docs/02 and `contracts/v1/` specify. `WorkerEnvironment.Create()`'s real (non-simulated) mode
-  now uses `CoreAdapter.CoreFileDisposalAdapter` (real Core) instead of `Simulation.SimulatedCore`.
-  This was wired without a Windows machine to verify it on — run `SSDShredder.Core.Tests` and
-  `SSDShredder.Worker.Tests` on real Windows, then a live GUI inspect-then-shred pass on a
-  disposable file, before trusting it with real data. `SSDSHREDDER_SIMULATE=1` remains available
-  as a safe fallback if the real path misbehaves.
+  uses `CoreAdapter.CoreFileDisposalAdapter` (real Core) instead of `Simulation.SimulatedCore` —
+  **confirmed on real Windows 11 Pro 26300.9974**: Core 73/73, Worker 235/235, real
+  `--inspect`/`--shred` both correct (see `docs/ENGINEER1_OBSERVATIONS.md`, "Test machine 2").
+  `SSDSHREDDER_SIMULATE=1` remains available as a fallback. BitLocker/vault
+  (`WindowsVaultPlatform`) is still a stub — don't expect `--vault-init` to do anything real.
 - UI rules (`SSDShredder.UI`): Avalonia, cross-platform by design. Windows-only shell integration
-  lives behind `OperatingSystem.IsWindows()` checks, never behind the TFM. Still talks to
-  `SimulatedWorkerClient` — this is the one remaining integration seam. The real protocol is
-  fully specified in `src/SSDShredder.Worker/README.md`'s "Integration seams" section and
-  `contracts/v1/`: create a DACL'd named pipe `SSDShredder.v1.<32 hex>`, launch
-  `SSDShredder.Worker.exe --ipc <32 hex> --parent-pid <ui pid>` unelevated, send `inspect` then
-  one `shred` with the returned `selectionToken` on that same connection. Not written here:
-  `SSDShredder.Worker.exe` is a `win-x64` binary and can't run on macOS even under Rosetta, so
-  this couldn't be written *and verified* without a Windows machine.
-- Windows-only .NET API gotcha (UI): `PipeOptions.CurrentUserOnly` cannot be combined with an
-  explicit `PipeSecurity` — `NamedPipeServerStreamAcl.Create` throws `ArgumentException`. Use
-  `PipeOptions.Asynchronous` plus the explicit current-user DACL instead (fixed in
-  `ActivationRouter.CreateServerStream`; it only surfaced when `SSDShredder.UI.Tests` ran on real
-  Windows). Apply the same rule to the real worker-pipe client/server when wiring it. Run
-  `dotnet test` on Windows before merging UI pipe/ACL code.
+  lives behind `OperatingSystem.IsWindows()` checks, never behind the TFM.
+  `ActivationRouter.CreateServerStream` used to combine `PipeOptions.CurrentUserOnly` with an
+  explicit `PipeSecurity`, which Windows rejects — **fixed and confirmed on real Windows**: all
+  `ActivationRouterTests` pass (25/25 UI tests total), and a second launch hands off to the
+  first in ~340ms. `ProcessWorkerClient` (Worker/ProcessWorkerClient.cs) now implements the
+  real IWorkerClient — DACL'd pipe `SSDShredder.v1.<32 hex>` mirroring Worker's own
+  `PipeEndpoints.CreateServer`, launches `SSDShredder.Worker.exe --ipc <32 hex> --parent-pid
+  <ui pid>` unelevated, sends `inspect` then one `shred` with the returned `selectionToken` on
+  that same connection — but it's **written, not verified**, and **opt-in**
+  (`SSDSHREDDER_REAL_WORKER=1` on Windows; `App.CreateWorkerClient()` falls back to
+  `SimulatedWorkerClient` otherwise). `WireMapping.cs` holds the pure wire ↔ enum logic with
+  no Windows dependency at all — that part has 46 real passing tests
+  (`WireMappingTests.cs`); the pipe/process plumbing in `ProcessWorkerClient.cs` itself does
+  not, for the same reason as always: `SSDShredder.Worker.exe` is a `win-x64` binary that
+  can't run on macOS even under Rosetta. **Also needs the real peer check's requirement that
+  `SSDShredder.UI.exe` and `SSDShredder.Worker.exe` sit in the same installed directory** —
+  use `SSDSHREDDER_WORKER_PATH` to point at Worker directly until there's a real installer.
+- ShellExtension: **confirmed clean on real Windows 11 Pro** after PR #1's fixes (destructor
+  `override` with no virtual base, a malformed `.rc` manifest line, missing
+  `shlwapi.h`/`shlobj.h` includes, a `.def` LIBRARY name mismatch, `/MANIFEST:NO` for the
+  linker's duplicate-manifest conflict) — Debug and Release, 0 errors, 0 warnings (the C4244
+  from the PR is gone too). Build only — install/register/Explorer/drop-target checks are
+  still open.
 - Wire contract: `contracts/v1/` holds frozen JSON schemas, the exit-code map, and
   schema-checked examples (see `contracts/v1/README.md` for how they were checked and why
   `worker-event.schema.json` alone can't tell you which evidence shape applies).

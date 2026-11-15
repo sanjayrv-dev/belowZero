@@ -65,6 +65,9 @@ public class CommandLineTests
     [InlineData(@"C:\dir\")]
     [InlineData(@"C:\a.bin ")]
     [InlineData(@"C:\a*.bin")]
+    [InlineData(@"C:\dir\NUL")]
+    [InlineData(@"C:\dir\a.bin.")]
+    [InlineData(@"C:\dir.\a.bin")]
     public void Rejects_paths_that_are_not_plain_absolute_local_files(string path)
     {
         Assert.False(Validation.IsAbsoluteLocalFilePath(path));

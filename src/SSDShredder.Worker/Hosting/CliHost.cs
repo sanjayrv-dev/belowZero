@@ -20,6 +20,40 @@ public static class CliHost
 
         if (env.Simulated) stderr.WriteLine("SIMULATED: no file, disk or BitLocker state is touched.");
 
+        try
+        {
+            return Dispatch(cmd, env, sink, emit, id, stdin, stderr, interactive);
+        }
+        catch (Exception e)
+        {
+            // Redacted: type and code only, no paths or messages.
+            stderr.WriteLine($"internal error: {e.GetType().Name} (0x{e.HResult:X8})");
+
+            // The exit code must agree with the terminal result on stdout.
+            if (emit.ResultCode is ExitCode reported) return reported;
+
+            // Code 7 means a verified pre-mutation failure. Nothing was verified here.
+            ExitCode code = cmd.Verb switch
+            {
+                Verb.Shred => ExitCode.Indeterminate,
+                Verb.VaultInit or Verb.VaultClose => ExitCode.Recovery,
+                _ => ExitCode.Failed,
+            };
+            try
+            {
+                return emit.Result(code, null);
+            }
+            catch (Exception)
+            {
+                return code;
+            }
+        }
+    }
+
+    private static ExitCode Dispatch(
+        ParsedCommand cmd, WorkerEnvironment env, IFrameSink sink, RequestEmitter emit, string id,
+        TextReader stdin, TextWriter stderr, bool interactive)
+    {
         switch (cmd.Verb)
         {
             case Verb.Inspect:
@@ -97,7 +131,8 @@ public static class CliHost
     /// <summary>Runs a vault request in a helper process: elevated for real, as-is when simulated.</summary>
     private static ExitCode ViaHelper(WireRequest request, WorkerEnvironment env, IFrameSink sink, RequestEmitter emit, TextWriter stderr)
     {
-        if (!env.Simulated)
+        // Status only reads the journal, so it does not depend on what the platform can do.
+        if (!env.Simulated && request.Op != Ops.VaultStatus)
         {
             // Refuse before asking for consent when the platform cannot do it anyway.
             PlatformResult pre = env.Platform.CheckPrerequisites();

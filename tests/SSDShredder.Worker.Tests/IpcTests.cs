@@ -83,8 +83,7 @@ public class PipeTests
         using NamedPipeClientStream client = PipeEndpoints.Connect(name, 5000)!;
         var sink = new CapturingSink();
         ExitCode code = HelperLauncher.RunOver(client, new WireRequest(Frames.Id2, Ops.VaultClose, Frames.Id3, true, null), sink);
-        // Soft wait, same as the original Task.Wait(5000): proceed either way, never throw on timeout.
-        await Task.WhenAny(serving, Task.Delay(5000));
+        await serving.WaitAsync(TimeSpan.FromSeconds(5));
 
         Assert.Equal(ExitCode.Completed, code);
         Assert.Equal(2, sink.Lines.Count);
@@ -95,6 +94,8 @@ public class PipeTests
     [InlineData(Ops.VaultClose, true, 9)]
     [InlineData(Ops.VaultInit, false, 9)]
     [InlineData(Ops.VaultStatus, false, 7)]
+    [InlineData(Ops.Shred, true, 8)]
+    [InlineData(Ops.Inspect, false, 7)]
     public void A_lost_completion_is_reported_once_and_never_replayed(string op, bool confirmed, int expected)
     {
         // The far end reads the request and goes away without answering.
@@ -383,14 +384,95 @@ public sealed class EndToEndTests : IDisposable
         Assert.Equal("ready", Run(["--vault-status", id]).Evidence.GetProperty("phase").GetString());
     }
 
+    private void WaitForNoOwners()
+    {
+        for (int i = 0; i < 50 && Owners().Count > 0; i++) Thread.Sleep(100);
+        Assert.Empty(Owners());
+    }
+
+    [Fact]
+    public void A_policy_refusal_ends_as_unsupported_with_nothing_left_behind()
+    {
+        RunResult init = Run(["--vault-init"], new() { ["SSDSHREDDER_SIM_FAULTS"] = "protect:PolicyRefused" });
+        Assert.True(init.ExitCode == 4, init.Stderr + string.Join("\n", init.Events));
+        Assert.Equal("retired", init.Evidence.GetProperty("phase").GetString());
+        Assert.Equal(JsonValueKind.Null, init.Evidence.GetProperty("mount").ValueKind);
+        Assert.False(init.Evidence.TryGetProperty("conversion", out _));
+
+        // No session owner stays behind for a vault that was never published.
+        WaitForNoOwners();
+        string id = init.Evidence.GetProperty("vaultId").GetString()!;
+        RunResult status = Run(["--vault-status", id]);
+        Assert.Equal(0, status.ExitCode);
+        Assert.Equal("retired", status.Evidence.GetProperty("phase").GetString());
+    }
+
+    [Fact]
+    public void A_failed_lock_reports_9_and_keeps_the_vault_closed_to_use()
+    {
+        RunResult init = Run(["--vault-init"], new() { ["SSDSHREDDER_SIM_FAULTS"] = "lock:RecoveryKeyRequired" });
+        Assert.Equal(0, init.ExitCode);
+        string id = init.Evidence.GetProperty("vaultId").GetString()!;
+
+        RunResult close = Run(["--vault-close", id, "--confirm"]);
+        Assert.True(close.ExitCode == 9, close.Stderr + string.Join("\n", close.Events));
+        Assert.Equal("closing", close.Evidence.GetProperty("phase").GetString());
+        Assert.Equal(JsonValueKind.Null, close.Evidence.GetProperty("mount").ValueKind);
+        Assert.Equal(JsonValueKind.Null, close.Evidence.GetProperty("lockedObserved").ValueKind);
+
+        // The owner is still there, holding the image, and says the same.
+        Assert.Single(Owners());
+        RunResult status = Run(["--vault-status", id]);
+        Assert.Equal("closing", status.Evidence.GetProperty("phase").GetString());
+        Assert.Equal(JsonValueKind.Null, status.Evidence.GetProperty("mount").ValueKind);
+    }
+
+    [Fact]
+    public void A_failed_lock_closes_through_the_detach_route_when_that_route_is_allowed()
+    {
+        RunResult init = Run(["--vault-init"], new()
+        {
+            ["SSDSHREDDER_SIM_FAULTS"] = "lock:RecoveryKeyRequired",
+            ["SSDSHREDDER_SIM_DETACH_ROUTE"] = "1",
+        });
+        string id = init.Evidence.GetProperty("vaultId").GetString()!;
+
+        RunResult close = Run(["--vault-close", id, "--confirm"]);
+        Assert.True(close.ExitCode == 0, close.Stderr + string.Join("\n", close.Events));
+        Assert.Equal("retired", close.Evidence.GetProperty("phase").GetString());
+        Assert.True(close.Evidence.GetProperty("lockedObserved").GetBoolean());
+        WaitForNoOwners();
+    }
+
+    [Fact]
+    public void An_interrupted_cleanup_is_finished_later_by_recovery()
+    {
+        var optIn = new Dictionary<string, string> { ["SSDSHREDDER_SIM_OPTIN"] = "1" };
+        RunResult init = Run(["--vault-init"], new(optIn) { ["SSDSHREDDER_SIM_FAULTS"] = "delete:Failed" });
+        string id = init.Evidence.GetProperty("vaultId").GetString()!;
+
+        // Locked and detached, but the backing image could not be retired.
+        RunResult close = Run(["--vault-close", id, "--confirm"]);
+        Assert.True(close.ExitCode == 9, close.Stderr + string.Join("\n", close.Events));
+        Assert.Equal("closing", close.Evidence.GetProperty("phase").GetString());
+        Assert.True(close.Evidence.GetProperty("lockedObserved").GetBoolean());
+
+        KillOwners();
+        RunResult later = Run(["--vault-close", id, "--confirm"], optIn);
+        Assert.True(later.ExitCode == 0, later.Stderr + string.Join("\n", later.Events));
+        Assert.Equal("retired", later.Evidence.GetProperty("phase").GetString());
+        Assert.True(later.Evidence.GetProperty("lockedObserved").GetBoolean());
+        Assert.Contains(later.Events, e => e.GetProperty("type").GetString() == "progress" && e.GetProperty("phase").GetString() == "reconciling");
+    }
+
     [Fact]
     public async Task Two_simultaneous_closes_both_end_with_the_retired_receipt()
     {
         string id = Run(["--vault-init"]).Evidence.GetProperty("vaultId").GetString()!;
-        Task<RunResult>[] closers = [.. Enumerable.Range(0, 2).Select(_ => Task.Run(() => Run(["--vault-close", id, "--confirm"])))];
-        await Task.WhenAll(closers);
-        Assert.All(closers, t => Assert.True(t.Result.ExitCode == 0, t.Result.Stderr + string.Join("\n", t.Result.Events)));
-        Assert.All(closers, t => Assert.Equal("retired", t.Result.Evidence.GetProperty("phase").GetString()));
+        RunResult[] closed = await Task.WhenAll(
+            Enumerable.Range(0, 2).Select(_ => Task.Run(() => Run(["--vault-close", id, "--confirm"]))));
+        Assert.All(closed, r => Assert.True(r.ExitCode == 0, r.Stderr + string.Join("\n", r.Events)));
+        Assert.All(closed, r => Assert.Equal("retired", r.Evidence.GetProperty("phase").GetString()));
     }
 
     [Theory]

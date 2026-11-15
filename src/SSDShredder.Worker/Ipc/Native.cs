@@ -45,6 +45,9 @@ internal static unsafe partial class Native
     internal static partial int GetNamedPipeServerProcessId(SafePipeHandle pipe, out uint processId);
 
     [LibraryImport("kernel32.dll", SetLastError = true)]
+    internal static partial int DisconnectNamedPipe(SafePipeHandle pipe);
+
+    [LibraryImport("kernel32.dll", SetLastError = true)]
     internal static partial int ProcessIdToSessionId(uint processId, out uint sessionId);
 
     [LibraryImport("kernel32.dll", SetLastError = true)]

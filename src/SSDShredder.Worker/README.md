@@ -35,8 +35,11 @@ SSDShredder.Worker --vault-close <vault-uuid> --confirm
 | `SSDSHREDDER_SIM_OPTIN=1` | Recovery may retire a verified orphan |
 | `SSDSHREDDER_SIM_DETACH_ROUTE=1` | Allow the detach/reattach close route |
 
-Without the variable the build is in real mode: file verbs and vault verbs both end with
-exit 4, and nothing is touched.
+Without the variable the build is in real mode. File verbs, `--vault-init` and
+`--vault-close` end with exit 4 before any consent prompt, and nothing is touched: the
+prerequisite check now tests the edition, the Virtual Disk API and the BitLocker
+components, and then still refuses because the provider is a stub. `--vault-status` only
+reads the journal, so it does ask for consent and runs in an elevated helper.
 
 ## Layout
 
@@ -63,15 +66,25 @@ exit 4, and nothing is touched.
   `SSDShredder.Worker.Tests` needs to actually pass on Windows, and a live GUI
   inspect-then-shred pass on a disposable file needs to happen, before trusting this with
   real data. `SSDSHREDDER_SIMULATE=1` is still there as a fallback if it misbehaves.
-- **UI (Engineer 3).** For file disposal, create a pipe named `SSDShredder.v1.<32 hex>`,
+- **UI (Engineer 3). Written, not yet verified on real hardware.**
+  `SSDShredder.UI/Worker/ProcessWorkerClient.cs` implements this now (opt-in behind
+  `SSDSHREDDER_REAL_WORKER=1`; `SimulatedWorkerClient` stays the default until this is
+  confirmed). The pipe DACL mirrors `PipeEndpoints.CreateServer` above exactly, not
+  `PipeOptions.CurrentUserOnly` (that combination is what broke `ActivationRouter` and is
+  deliberately not repeated here). Needs a real Windows run — ideally with
+  `SSDShredder.UI.exe` and `SSDShredder.Worker.exe` actually installed side by side per the
+  real-mode peer check described below — before trusting it with real data.
+
+  For file disposal, create a pipe named `SSDShredder.v1.<32 hex>`,
   start `SSDShredder.Worker --ipc <32 hex> --parent-pid <ui pid>` unelevated, send `inspect`,
   then one `shred` with the returned `selectionToken` on the same connection. The pipe name
   is the same in simulated and real mode. The worker checks that the pipe server is its
   parent PID, the same user and the same session. In real mode it also requires the server's
   executable to sit in the worker's own folder, so the UI and the worker must be installed
   side by side; a simulated run skips that one rule. A refused connection exits 5 with the
-  reason on stderr and no events. `EndToEndTests.DriveAsUi` is a working example of the
-  server side. For vaults, run the published `--vault-*` commands and read stdout.
+  reason on stderr and no events. `EndToEndTests.DriveAsUi` (in `IpcTests.cs`) is a working
+  example of the server side. Inspecting again on the same connection, the same file
+  included, replaces the held selection and its token. For vaults, run the published `--vault-*` commands and read stdout.
 
 ## Questions for the lead (contract)
 
@@ -92,13 +105,89 @@ exit 4, and nothing is touched.
 8. "Trusted installed image" is implemented as "same folder as the worker executable".
 9. This branch adds a root `.gitignore` (bin, obj, .vs, TestResults). It is a shared file:
    keep, replace or drop it.
+10. `--vault-status` answers from the journal alone. If the owner process died, a vault
+    still recorded as `ready` is reported as `ready` with its mount path and encryption
+    facts, although nobody holds it. Should status observe the platform and report
+    `orphan` or `unknown` there? It changes nothing today until a close reconciles it.
+11. Once the owner has exited, a real-mode `--vault-status` or repeated `--vault-close`
+    needs an elevated helper, so the user gets a UAC prompt just to read a receipt. The
+    journal is meant to be administrator-only. Accept the prompt, or keep a user-readable
+    receipt?
+12. Nothing checks that the worker's own folder is administrator-only before it asks for
+    elevation of its own executable. Should the Worker refuse to elevate from a
+    user-writable folder, or is that the installer's guarantee alone?
+13. `--inspect` runs when elevated; only `--shred` is refused. It then classifies files
+    the ordinary user might not be able to open. Refuse it too?
+14. A command line that does not parse exits 2 with usage on stderr and no result event on
+    stdout. The contract says the CLI writes its events to stdout. Emit a result there?
+15. A vault verb sent to an unelevated helper is answered with code 2 (invalid). Code 5
+    (denied) may describe it better.
+
+### Where the architecture doc already answers
+
+These three need a confirmation, not a decision.
+
+- **1.** `unlinking` is in the published phase list. The shred example is shorter than a
+  real run, so a UI must accept any listed phase before the result.
+- **5.** Code 5 is "authority/identity failed", which is what a wrong or expired token is.
+- **8.** The doc puts the worker in an installer-owned, protected Program Files folder, so
+  "same folder as the worker" is the trusted image, provided question 12 is settled.
+
+The rest are open: 2, 3, 4, 6, 7, 9 and 10 to 15. Question 6 (simulated receipts look
+real) is the one to settle before any demo.
+
+## Simulated coverage of the charter flows
+
+Each flow below has a state-machine test, and those marked CLI also run through real
+worker processes and pipes. All of it is simulated: none of it shows that real VHDX,
+BitLocker or UAC behaviour works.
+
+| Flow | Tests |
+| --- | --- |
+| Policy refusal | `A_policy_refusal_is_unsupported_and_the_new_image_is_undone`, CLI `A_policy_refusal_ends_as_unsupported_with_nothing_left_behind` |
+| UAC refusal (1223) | `A_helper_that_never_started_yields_one_synthesized_result`, with a fake launcher only |
+| Failed lock | `A_refused_lock_…`, `A_lock_refused_because_something_is_open_…`, the detach-route tests, CLI `A_failed_lock_…` (two) |
+| Interrupted cleanup | `An_interrupted_close_is_finished_by_recovery`, `A_worker_killed_while_undoing_a_refused_creation_is_reconciled`, CLI `An_interrupted_cleanup_is_finished_later_by_recovery` |
+| Open-file lock refusal | `A_busy_vault_stays_open_and_can_be_closed_later`, CLI `A_busy_vault_reports_6_and_stays_ready` |
+| Worker killed while provisioning | `A_worker_killed_during_provisioning_is_reconciled_to_a_retired_vault` (every step, before and after its effect) |
+| Two simultaneous closes | `Two_simultaneous_closes_…` (service and CLI) |
+| Stale mount or volume identity | `A_mount_folder_that_resolves_to_another_volume_blocks_cleanup`, `Recovery_removes_a_stale_mount_…`, `Recovery_refuses_an_image_whose_volume_identity_no_longer_matches_the_record` |
+| Interrupted disposal | `A_connection_lost_during_a_confirmed_shred_neither_stops_nor_repeats_it`, `A_lost_completion_is_reported_once_and_never_replayed` |
+
+Not covered even in simulation: killing a worker process mid-provisioning through the CLI
+(the simulator has no crash switch for a real process), and a UAC prompt answered with a
+different account.
+
+## Requirements on the real provider
+
+The state machine relies on these. The simulator already behaves this way, so the tests
+cannot catch a real provider that does not.
+
+- `Quiesce` and `Unmount` are re-entrant. A resumed close calls both again on a volume
+  that is still attached, already quiesced and no longer mounted, and both must answer Ok.
+- `Observe` throws, or reports unknown facts as null, when it cannot look. Recovery retires
+  a record that shows no backing file and no mount, so "could not look" must never read as
+  "nothing is left". The placeholder throws.
+- Disposing an attachment twice is harmless.
 
 ## Not done, needs the Pro machine
 
 - `Vault/WindowsVaultPlatform.cs`: real VHDX create/attach, GPT/NTFS, BitLocker WMI, mount,
   lock, detach, identity checks. Every method currently returns "unsupported".
-- A real UAC consent run (`runas`), including decline (1223) and a different-account prompt.
-  An unelevated client reading an elevated owner's token user has not been exercised.
+- A real UAC consent run (`runas`) for decline (1223) and a different-account prompt.
+  The accept case was run on Windows 11 Pro 26300.9974 (one admin account, default UAC
+  settings, worker in a user-writable build folder): real-mode `--vault-status` with an
+  unknown vault ID was accepted at the prompt three times and each time the elevated
+  helper answered code 5 with `phase: unknown` evidence. So the launcher's pipe ACL and
+  both peer checks work across elevation for launcher to helper. Nothing was created.
+  Still not run: decline, a different account, and an unelevated client talking to an
+  elevated session owner (no real owner can exist until the provider is built).
+  An unelevated client reading an elevated owner's token user has not been exercised end
+  to end. A read-only check on Windows 11 Home 26200 (one admin account, split token)
+  found that the limited and the elevated token carry the same logon SID, and that a
+  limited process can read the user of a fully elevated process of the same account. So
+  the pipe ACL and the peer check are expected to work across elevation, but only the
+  real `runas` run proves it.
 - Admin-only ACL on the real journal folder under `%ProgramData%\SSDShredder`.
 - Qualifying `Lock(false)` versus the detach route on the target build and policy.
 - The session owner's lifetime (8 hours) ends by exiting. Decide what a real expiry should do.

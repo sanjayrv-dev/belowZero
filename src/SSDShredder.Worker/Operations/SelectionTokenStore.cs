@@ -92,10 +92,13 @@ public sealed class SelectionTokenStore : IDisposable
         }
     }
 
-    public void Dispose()
+    /// <summary>Gives up the current selection, if any, and closes its handle.</summary>
+    public void Release()
     {
         lock (_gate) ReleaseLocked();
     }
+
+    public void Dispose() => Release();
 
     private void ReleaseLocked()
     {

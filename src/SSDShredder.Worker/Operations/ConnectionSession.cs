@@ -105,7 +105,16 @@ public sealed class ConnectionSession
             {
                 if (!emit.Completed)
                 {
-                    emit.Result(req.Op is Ops.VaultInit or Ops.VaultClose ? ExitCode.Recovery : ExitCode.Failed, null);
+                    // Code 7 means a verified pre-mutation failure. An unexpected error in a
+                    // confirmed shred verifies nothing, so it is reported as indeterminate.
+                    emit.Result(
+                        req.Op switch
+                        {
+                            Ops.VaultInit or Ops.VaultClose => ExitCode.Recovery,
+                            Ops.Shred => ExitCode.Indeterminate,
+                            _ => ExitCode.Failed,
+                        },
+                        null);
                 }
             }
 

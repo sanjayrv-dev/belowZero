@@ -41,6 +41,17 @@ prerequisite check now tests the edition, the Virtual Disk API and the BitLocker
 components, and then still refuses because the provider is a stub. `--vault-status` only
 reads the journal, so it does ask for consent and runs in an elevated helper.
 
+## bzo.exe
+
+The build and publish output hold `bzo.exe` beside `SSDShredder.Worker.exe`: the same program under
+its public name (a second apphost for `SSDShredder.Worker.dll`). Every verb behaves identically under
+both names. `bzo.exe` with no arguments opens or focuses the unelevated panel: it sends an `open`
+activation to the UI's ActivationRouter and exits 0 once the owner acknowledges, starting
+`SSDShredder.UI.exe` (which must sit beside it) first if no panel is running. It exits 7 if the panel is
+missing, cannot be started or does not answer within 20 seconds, and writes no NDJSON. From an elevated
+terminal the panel is started with the desktop shell's ordinary token, never the terminal's. The worker
+image with no arguments still prints its usage and exits 2.
+
 ## Layout
 
 | Folder | What it holds |

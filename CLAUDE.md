@@ -22,7 +22,14 @@
   **confirmed on real Windows 11 Pro 26300.9974**: Core 73/73, Worker 235/235, real
   `--inspect`/`--shred` both correct (see `docs/ENGINEER1_OBSERVATIONS.md`, "Test machine 2").
   `SSDSHREDDER_SIMULATE=1` remains available as a fallback. BitLocker/vault
-  (`WindowsVaultPlatform`) is still a stub — don't expect `--vault-init` to do anything real.
+  (`WindowsVaultPlatform`) is still a stub, and still unmerged — the real implementation lives
+  on the separate, deliberately-not-merged `feat/vhdx-vault` branch. Don't expect `--vault-init`
+  on `main` to do anything real.
+- `/bzo` (`src/SSDShredder.Worker/Install/`): **templates only, not wired up.**
+  `Install-BzoShell.ps1` can write the PowerShell alias block and render the DOSKEY macro file
+  (6/6 `ShellInstallTests` passing on real Windows PowerShell 5.1), but nothing calls it during
+  install, there is no `bzo.exe` (the published binary is still `SSDShredder.Worker.exe`), and
+  there's no no-argument "open the UI" behavior. Don't describe `/bzo` as a working command.
 - UI rules (`SSDShredder.UI`): Avalonia, cross-platform by design. Windows-only shell integration
   lives behind `OperatingSystem.IsWindows()` checks, never behind the TFM.
   `ActivationRouter.CreateServerStream` used to combine `PipeOptions.CurrentUserOnly` with an

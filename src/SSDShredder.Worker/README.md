@@ -53,6 +53,7 @@ reads the journal, so it does ask for consent and runs in an elevated helper.
 | `Ipc/` | Restricted pipe, peer checks, helper launcher (`ShellExecuteExW`) |
 | `Hosting/` | CLI host, `--ipc` helper mode, session owner endpoint |
 | `Simulation/` | Simulated Core and vault platform with fault injection |
+| `Install/` | `/bzo` shell-alias installer templates (PowerShell profile block + DOSKEY macro). **Templates only — nothing calls them during install yet, and there is no `bzo.exe`; the published binary is still `SSDShredder.Worker.exe`.** |
 
 ## Integration seams
 

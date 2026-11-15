@@ -6,13 +6,37 @@ vault when that isn't possible). Built for a hackathon by three engineers in
 parallel; see [docs/](docs/) for the full research, architecture, wire
 contract, and build plan.
 
+## Status for this submission (prototype, feature-frozen)
+
+- **The UI panel may be running against a simulated worker.** `SimulatedWorkerClient`
+  is the UI's default; a real worker connection exists in code but is opt-in and
+  unconfirmed (see below). Any recording of the Avalonia panel should be labeled
+  as such unless `SSDSHREDDER_REAL_WORKER=1` has actually been verified working.
+- **Physical NVMe file-level TRIM was refused on every physical drive tested —
+  two independent machines, two different NVMe models.** Both returned Win32
+  error 326 ("device does not support file-level TRIM"). The real Worker's
+  response to that refusal is **exit 7, and the target file is left in place** —
+  a verified, intentional "clean refusal," not a bug. A thin-provisioned VHDX
+  did acknowledge the raw request, but that only shows the request layout is
+  correct, not that any block was actually deallocated — it says nothing about
+  physical media. See `docs/ENGINEER1_OBSERVATIONS.md` for the full readout.
+- **`/bzo` is not a working launcher yet.** Only the PowerShell/cmd alias
+  *installer templates* exist (`src/SSDShredder.Worker/Install/`); nothing
+  calls them during install, no executable is named `bzo.exe`, and there is no
+  no-argument "open the UI" behavior wired up. Don't record `/bzo` as if it runs.
+- **The real BitLocker vault is unfinished.** `WindowsVaultPlatform` is still a
+  stub in every build on `main`; the in-progress real implementation lives on
+  the unmerged `feat/vhdx-vault` branch, kept separate deliberately. Don't
+  record `--vault-init`/`--vault-close` as doing anything real.
+
 ## Layout
 
 ```text
 SSDShredder.sln
 ├── src/
 │   ├── SSDShredder.Core/             net9.0-windows · file handles, topology, extents, trim (Engineer 1)
-│   ├── SSDShredder.Worker/           net9.0-windows · bzo.exe CLI, wire protocol, vault lifecycle (Engineer 2)
+│   ├── SSDShredder.Worker/           net9.0-windows · SSDShredder.Worker.exe CLI, wire protocol, vault lifecycle (Engineer 2)
+│   │                                  (publishes as SSDShredder.Worker.exe, not bzo.exe — see "Status" above)
 │   ├── SSDShredder.UI/               net9.0 · Avalonia bin panel, confirmation, status, picker (Engineer 3)
 │   └── SSDShredder.ShellExtension/   native C++ (CMake) · desktop broker, Explorer command, installer (Engineer 3)
 ├── tests/                            one *.Tests project per src project above
@@ -43,11 +67,17 @@ clean on real Windows 11 Pro: Debug and Release, 0 errors, 0 warnings.
 Installing, registering, and the Explorer/drop-target acceptance checks are
 still open.
 
-## Integration status (confirmed on real Windows 11 Pro 26300.9974, 2026-11)
+## Integration status (2026-11)
 
-All three engineers' work is merged into `main` and fully green on real
-hardware: **Core 73/73, Worker 235/235, UI 25/25**, solution build with 0
-warnings.
+As of the last combined real-Windows run (Windows 11 Pro 26300.9974, before
+the `/bzo` installer-template PR landed): **Core 73/73, Worker 235/235, UI
+25/25**, solution build with 0 warnings. Since then, `main` gained 6 more
+Worker tests (`ShellInstallTests`, reported 6/6 passing separately on real
+Windows PowerShell) and 46 more UI tests (`WireMappingTests`, pure logic, no
+Windows dependency, verified on macOS). **The full current count — 241
+Worker, 71 UI — has not yet been re-run as one combined pass on Windows;**
+what's stated above is each piece's own last confirmed run, not a single
+fresh number.
 
 - **`SSDShredder.Worker` → `SSDShredder.Core`: wired and confirmed.**
   `CoreFileDisposalAdapter` implements Worker's `IFileDisposalCore` over Core's

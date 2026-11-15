@@ -6,7 +6,7 @@ Observed results only. Expected behaviour lives in docs/01 and docs/02.
 - Windows version: 10.0.26300.0 (build number is above 24H2/25H2 retail 26100/26200; likely a preview channel — unverified).
 - Disk: Samsung BM9C1 1024 GB, NVMe, MediaType SSD (Get-PhysicalDisk). Volume C: is NTFS, 4096-byte clusters, page size 4096.
 - `fsutil behavior query DisableDeleteNotify`: NTFS = 0, ReFS = 0 (TRIM allowed).
-- BitLocker status: not determined (`manage-bde -status C:` needs an elevated shell).
+- BitLocker: `manage-bde -status C:` (elevated) shows C: fully decrypted, protection off, no key protectors, unlocked. So the 326 refusal is not caused by BitLocker on this machine.
 
 ## Results (`dotnet test`, 40/40 passing at commit c171aae; 62/62 at 3d91b47)
 - Inspector verdict for a 12,903-byte temp file: eligible, bus=nvme, covered=12,288, tail=615 (IncursSeekPenalty=False, TrimEnabled=True, 1 disk).
@@ -27,9 +27,46 @@ Observed results only. Expected behaviour lives in docs/01 and docs/02.
 ## Also covered by tests now
 - Classifier edge cases (sparse, compressed, EFS, named stream, reparse, non-NTFS, unknown bus, null/multi-disk topology, rotational, TRIM disabled, failed/unsupported query, short coverage, empty, page-aligned) and WorkerFixtures consistency.
 
+## Test machine 2
+- Windows 10.0.26200 (Windows 11 Pro; `Get-ComputerInfo` reports "Windows 10 Pro"). One physical disk: PC SN5000S WD 1024GB, NVMe, SSD, 1,024,209,543,168 bytes. C: (NTFS, 1 TB) plus three unlettered recovery/support partitions. %TEMP% is on C: (disk 0). NTFS and ReFS `DisableDeleteNotify` = 0. BitLocker status not collected (shell not elevated). No second internal volume, so the second-volume diagnostic was skipped.
+- `dotnet test`: 62/62 passing at 95daad7 (.NET SDK 9.0.321).
+- **326 diagnostic:** 1 page, 3 pages (flush and no flush, exclusive and shared rw) and 1 MiB whole file all returned `win32=326 returned=0 processed=null`. No `win32=0`, so still no positive acknowledgement. Write-data-only access gave 326 in the full run but 1224 in a second run (user-mapped section, access artefact).
+- Real submitter: `Eligible` (bus=nvme, covered=12288, tail=615), then `State = Failed ... trim refused by the stack (326); file left intact`, entry preserved.
+- Sizing: len=600 already reported `NoFullPage` (non-resident, first non-resident length observed: 600), versus resident up to 600 on machine 1. 4096 and up eligible, same as machine 1. The resident threshold varies by machine.
+- Conclusion: a second NVMe model (WD SN5000S) on a similar Windows build also refuses file-level TRIM with 326, matching machine 1 (Samsung BM9C1, 10.0.26300).
+
+## Cross-machine summary and decision
+- Two NVMe models (Samsung BM9C1, WD SN5000S) on Windows 10.0.26300 and 10.0.26200 both return 326 ("Device does not support file-level TRIM") for every request shape tried. The request layout matches docs/01; a malformed request would be expected to give 87, not 326.
+- Decision (v1): **clean refusal.** When file-level TRIM is refused (313/317/326) the executor reports Failed (exit 7), leaves the file and entry in place, and nothing is unlinked. Workers and UI must treat this as an expected result on the two NVMe machines tested, not an error condition. `WorkerFixtures.Unsupported` and `Partial` model the refusal and partial cases.
+- Open: whether any local stack accepts file-level TRIM. Update: a thin-provisioned VHDX does (see below); SATA SSD and Storage Spaces remain unverified.
+
+## Refusal paths on disk (machine 1, real Worker CLI, throwaway files in %TEMP%, 12,903 B unless noted)
+| Case | `--inspect` | `--shred --confirm` |
+|---|---|---|
+| baseline | eligible, BusTypeNvme, 12288 + 615 | exit 7 failed (326), entry preserved |
+| sparse | streams | exit 4 unsupported, file kept |
+| hard link | links | exit 4 unsupported, file kept |
+| named stream | streams | exit 4 unsupported, file kept |
+| compressed | streams | not run |
+| 100 B / empty | noExtents (resident here) | exit 4 unsupported, file kept (100 B) |
+| ACL deny write/delete | exit 5 denied | exit 5 denied, file kept |
+| exclusively opened | exit 6 busy | exit 6 busy, file kept |
+| missing file | exit 4 unsupported | not run |
+| relative, UNC, `file:stream` path | exit 2, no result line | not run |
+- Not run: symlink (needs privilege) and USB/unknown bridge (no USB drive on this machine).
+- Possible contract questions for the lead: a missing file reports exit 4 (unsupported); path-policy rejections exit 2 without a result event.
+
+## Thin-provisioned VHDX (machine 1, 2026-11-14)
+- Throwaway 256 MB expandable VHDX (`diskpart`), NTFS, 4096-byte cluster. `Get-Disk`: BusType `File Backed Virtual`, ProvisioningType `Thin`. NTFS `DisableDeleteNotify` = 0.
+- **Raw request acknowledged (not proof of erasure).** `TrimDiagnosticTests` run unelevated with `BELOWZERO_DIAG_DIR=Z:\`: all six request shapes (1 page, 3 pages with/without flush, shared rw, 1 MiB whole file, write-data-only access) returned `win32=0 returned=4 processed=1`. The same request shape gives 326 on both NVMe disks, so the request layout is not the cause of those refusals.
+- Scope of the claim: the stack *accepts* the request on a virtual disk. This does not show that blocks were deallocated or anything about a physical SSD.
+- The real Worker cannot exercise it: `--inspect` on that volume reports `eligible:false, reason:topology, bus:null` (the classifier does not recognise a file-backed virtual disk), and `--shred` refuses to run from an elevated prompt (exit 5). The VHDX had to be attached elevated and the diagnostic run unelevated; the volume was visible to the unelevated session.
+- Cleaned up afterwards (VHDX detached and deleted).
+- Still open: a SATA SSD or Storage Spaces; whether the classifier should ever accept virtual-disk topology (not changed).
+
 ## Not yet run
-- Positive TRIM acknowledgement on real hardware (needs a device whose stack accepts file-level TRIM; try another NVMe or a SATA SSD).
-- Unknown-bridge/USB fallback on real hardware, ACL-denied target, sparse/linked fixtures on disk.
+- Positive TRIM acknowledgement on a physical device (only a thin VHDX has acknowledged the raw request, and that does not prove erasure; try a SATA SSD).
+- Unknown-bridge/USB fallback on real hardware, symlink fixture (needs privilege).
 
 ## Test machine 2 (first Windows run of the full integrated repo, main @ d1c4b61)
 - Windows 11 Pro 26300.9974, .NET SDK 9.0.321.

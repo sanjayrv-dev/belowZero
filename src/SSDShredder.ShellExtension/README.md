@@ -8,18 +8,20 @@ shortcut and registry registration. See
 [docs/02_SYSTEM_ARCHITECTURE.md](../../docs/02_SYSTEM_ARCHITECTURE.md) for
 the activation contract these three implement against.
 
-## Status: written on macOS, not yet built or run
+## Status: builds, installs and uninstalls on Windows 11; real-mouse checks still open
 
-This code was authored without access to MSVC, the Windows SDK or a Windows
-machine, so **nothing in this directory has been compiled or exercised**.
-It follows well-established Win32 COM patterns (`IDropTarget`,
-`IExplorerCommand`, `IShellLinkW`/`IPersistFile`, restricted handle
-inheritance via `PROC_THREAD_ATTRIBUTE_HANDLE_LIST`) carefully, but a
-Windows teammate needs to build it, fix whatever the compiler/linker
-surfaces, and run the acceptance checks in the coding plan
-(cold drops, Explorer restart, duplicate activation, UAC refusal, icon
-persistence, uninstall) before trusting it. Treat every claim below as "this
-is what the code is written to do," not "this is verified behavior."
+The code was written on macOS and first built and exercised on Windows 11
+Pro (MSVC 19.44, Windows SDK 10.0.26100, Debug). Verified so far:
+install, repair and uninstall (idempotent; repair is identical to a fresh
+install), the desktop shortcut surviving an Explorer restart, the
+`IExplorerCommand` verb appearing and launching the UI, COM activation of the
+drop-target broker, cold-start hand-off to the UI, and duplicate activation
+focusing the one existing window.
+
+**Not verified:** a real mouse drag onto the desktop icon (programmatic drops
+through the shell's own drop target did not complete), the sign-out/sign-in
+persistence check, UAC refusal, and that the panel visibly starts inspection
+(window existence was checked, its contents were not). Treat those as open.
 
 What *is* verified: the wire protocol this native code speaks
 (`bzo-ar1-<10-hex>` pipe name, newline-delimited JSON frames, the exact
@@ -44,7 +46,15 @@ picks up `CMakeLists.txt` automatically). Needs the Windows 11 SDK for
 
 ## Manual install/uninstall for testing
 
-After building, from `build/<config>/`:
+Artifacts are laid out as `build/out/<Config>/<TargetName>/`, which is the
+sibling layout the installer and `UiLauncher.cpp` resolve. Publish the UI into
+the same tree first (framework-dependent, needs the .NET 9 SDK):
+
+```powershell
+dotnet publish ..\SSDShredder.UI -c Debug -r win-x64 --self-contained false -o build\out\Debug\SSDShredder.UI
+```
+
+Then, from `build/out/<Config>/SSDShredder.Installer/`:
 
 ```powershell
 .\SSDShredder.Installer.exe install     # creates the desktop shortcut, registers COM classes

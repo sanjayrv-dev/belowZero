@@ -193,7 +193,8 @@ public:
     }
 
 private:
-    std::atomic<ULONG> refCount_{0};
+    // Starts at 1 (the creator's reference); CreateInstance does QueryInterface then Release.
+    std::atomic<ULONG> refCount_{1};
 };
 
 class ExplorerCommandClassFactory : public IClassFactory {

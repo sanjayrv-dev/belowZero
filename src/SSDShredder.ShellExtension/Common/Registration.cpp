@@ -27,6 +27,11 @@ LSTATUS SetStringValue(HKEY root, const std::wstring& subKey, const wchar_t* val
     return status;
 }
 
+// Uninstall must be idempotent: a key that is already gone is success, not failure.
+LSTATUS IgnoreAlreadyGone(LSTATUS status) {
+    return status == ERROR_FILE_NOT_FOUND ? ERROR_SUCCESS : status;
+}
+
 }  // namespace
 
 HRESULT CreateDesktopShortcut(const std::wstring& targetExePath, const std::wstring& iconPath,
@@ -86,9 +91,9 @@ LSTATUS RegisterDesktopBrokerDropTarget(const std::wstring& clsidString, const s
 
 LSTATUS UnregisterDesktopBrokerDropTarget(const std::wstring& clsidString, const std::wstring& brokerExePath) {
     RegDeleteTreeW(HKEY_CURRENT_USER, (L"Software\\Classes\\CLSID\\" + clsidString).c_str());
-    return RegDeleteTreeW(
+    return IgnoreAlreadyGone(RegDeleteTreeW(
         HKEY_CURRENT_USER,
-        (L"Software\\Microsoft\\Windows\\CurrentVersion\\App Paths\\" + FileNameOf(brokerExePath)).c_str());
+        (L"Software\\Microsoft\\Windows\\CurrentVersion\\App Paths\\" + FileNameOf(brokerExePath)).c_str()));
 }
 
 LSTATUS RegisterExplorerCommand(const std::wstring& clsidString, const std::wstring& dllPath,
@@ -109,7 +114,8 @@ LSTATUS RegisterExplorerCommand(const std::wstring& clsidString, const std::wstr
 
 LSTATUS UnregisterExplorerCommand(const std::wstring& clsidString, const std::wstring& verbKey) {
     RegDeleteTreeW(HKEY_CURRENT_USER, (L"Software\\Classes\\*\\shell\\" + verbKey).c_str());
-    return RegDeleteTreeW(HKEY_CURRENT_USER, (L"Software\\Classes\\CLSID\\" + clsidString).c_str());
+    return IgnoreAlreadyGone(
+        RegDeleteTreeW(HKEY_CURRENT_USER, (L"Software\\Classes\\CLSID\\" + clsidString).c_str()));
 }
 
 }  // namespace belowzero

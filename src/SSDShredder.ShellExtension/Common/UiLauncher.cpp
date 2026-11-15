@@ -64,7 +64,16 @@ bool SendActivationStartingUiIfNeeded(const std::string& envelopeJson) {
     CloseHandle(processInfo.hThread);
     CloseHandle(processInfo.hProcess);
 
-    return SendActivationAndWaitForAck(envelopeJson, /*timeoutMillis=*/5000);
+    // The UI needs a moment to create its pipe. WaitNamedPipeW does NOT wait for a pipe that does
+    // not exist yet (it fails immediately with ERROR_FILE_NOT_FOUND), so poll until a deadline.
+    const ULONGLONG deadline = GetTickCount64() + 10000;
+    do {
+        if (SendActivationAndWaitForAck(envelopeJson, /*timeoutMillis=*/500)) {
+            return true;
+        }
+        Sleep(100);
+    } while (GetTickCount64() < deadline);
+    return false;
 }
 
 }  // namespace belowzero

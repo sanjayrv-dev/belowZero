@@ -124,7 +124,9 @@ private:
         return ok;
     }
 
-    std::atomic<ULONG> refCount_{0};
+    // Starts at 1 (the creator's reference): CreateInstance does QueryInterface then Release,
+    // so a 0 start would free the object before the caller ever sees it.
+    std::atomic<ULONG> refCount_{1};
 };
 
 // ---- IClassFactory -----------------------------------------------------

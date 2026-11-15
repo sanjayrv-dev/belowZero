@@ -92,6 +92,9 @@ int RunUninstall() {
     UnregisterDesktopBrokerDropTarget(kDropTargetClsidString, brokerExe.wstring());
     RemoveDesktopShortcut();
     RegDeleteTreeW(HKEY_CURRENT_USER, L"Software\\belowZero\\InstallDir");
+    // Drop the now-empty parent too. RegDeleteKeyW is non-recursive, so it fails harmlessly
+    // (and leaves the key) if anything else ever lives under Software\belowZero.
+    RegDeleteKeyW(HKEY_CURRENT_USER, L"Software\\belowZero");
 
     SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, nullptr, nullptr);
 
@@ -102,6 +105,12 @@ int RunUninstall() {
 }  // namespace
 
 int wmain(int argc, wchar_t** argv) {
+    // CreateDesktopShortcut uses CoCreateInstance(CLSID_ShellLink); COM must be initialised first.
+    HRESULT comInit = CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
+    if (FAILED(comInit)) {
+        std::wcerr << L"CoInitializeEx failed: 0x" << std::hex << comInit << L"\n";
+        return 1;
+    }
     std::wstring verb = argc >= 2 ? argv[1] : L"";
     if (verb == L"install" || verb == L"repair") {
         if (verb == L"repair") RunUninstall();  // Qualify repair as a clean uninstall followed by reinstall.

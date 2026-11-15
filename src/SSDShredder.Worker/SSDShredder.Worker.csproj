@@ -19,6 +19,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Shell-alias installer templates; the ShellExtension installer runs them from <install>\Install\. -->
+    <None Include="Install\**" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\SSDShredder.Core\SSDShredder.Core.csproj" />
   </ItemGroup>
 

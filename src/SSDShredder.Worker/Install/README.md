@@ -61,8 +61,5 @@ not set cmd's global `AutoRun`; that is an installer decision.
 - If the execution policy is `Restricted` or `AllSigned` an unsigned profile never loads. Install warns, since
   it cannot change policy; `RemoteSigned` for the current user is enough.
 - `-ProfilePath a|b` / `-MacroFile` exist for tests; the installer should omit them.
-- Verified on Windows 11 Pro 26300.9974 (installed to a staging folder, real profiles, then uninstalled):
-  a fresh PowerShell 7.7.0 session resolves `/bzo` and runs it with a spaced, non-ASCII file path with exit
-  codes 0 and 2 propagating; a real interactive cmd console expands the DOSKEY macro (input injected with
-  `WriteConsoleInput`, so doskey sees console input) with the same results. Not verified: a fresh Windows
-  PowerShell 5.1 session under the default `Restricted` policy (the test host forced `Bypass`), and Windows Terminal.
+- Windows PowerShell 5.1 only was exercised so far; the PowerShell 7 profile path was resolved and written but
+  not loaded by a real `pwsh`.

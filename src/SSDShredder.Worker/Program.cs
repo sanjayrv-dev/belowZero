@@ -8,9 +8,6 @@ internal static class Program
 {
     private static int Main(string[] args)
     {
-        // bzo.exe with no arguments opens or focuses the panel. The worker image keeps its usage error.
-        if (args.Length == 0 && QuickLaunch.IsBzoImage()) return (int)QuickLaunch.Run(Console.Error);
-
         if (!CommandLine.TryParse(args, out ParsedCommand? cmd, out string error) || cmd is null)
         {
             Console.Error.WriteLine(error);

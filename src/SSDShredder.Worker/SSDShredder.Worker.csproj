@@ -23,38 +23,6 @@
     <None Include="Install\**" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 
-  <!--
-    bzo.exe is the same program under its public name: a second apphost for SSDShredder.Worker.dll,
-    beside SSDShredder.Worker.exe in build and publish output. The helper elevation relaunches
-    whichever image was started, so both names work for every verb.
-  -->
-  <Target Name="CreateBzoApphost" AfterTargets="CopyFilesToOutputDirectory" DependsOnTargets="_GetAppHostPaths"
-          Condition="Exists('$(AppHostSourcePath)')">
-    <CreateAppHost AppHostSourcePath="$(AppHostSourcePath)"
-                   AppHostDestinationPath="$([System.IO.Path]::GetFullPath('$(OutDir)bzo.exe'))"
-                   AppBinaryName="$(AssemblyName)$(TargetExt)"
-                   IntermediateAssembly="@(IntermediateAssembly->'%(FullPath)')"
-                   WindowsGraphicalUserInterface="false"
-                   Retries="$(CopyRetryCount)"
-                   RetryDelayMilliseconds="$(CopyRetryDelayMilliseconds)" />
-  </Target>
-
-  <!-- Projects that reference the worker (its tests) get bzo.exe next to SSDShredder.Worker.exe. -->
-  <Target Name="BzoForReferrers" BeforeTargets="AssignTargetPaths">
-    <PropertyGroup>
-      <_BzoExe>$([System.IO.Path]::GetFullPath('$(OutDir)bzo.exe'))</_BzoExe>
-    </PropertyGroup>
-    <ItemGroup>
-      <None Include="$(_BzoExe)" Condition="Exists('$(_BzoExe)')" Link="bzo.exe" CopyToOutputDirectory="PreserveNewest" />
-    </ItemGroup>
-  </Target>
-
-  <Target Name="PublishBzoApphost" AfterTargets="ComputeResolvedFilesToPublishList">
-    <ItemGroup>
-      <ResolvedFileToPublish Include="$([System.IO.Path]::GetFullPath('$(OutDir)bzo.exe'))" RelativePath="bzo.exe" CopyToPublishDirectory="PreserveNewest" />
-    </ItemGroup>
-  </Target>
-
   <ItemGroup>
     <ProjectReference Include="..\SSDShredder.Core\SSDShredder.Core.csproj" />
   </ItemGroup>

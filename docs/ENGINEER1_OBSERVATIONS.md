@@ -38,7 +38,7 @@ Observed results only. Expected behaviour lives in docs/01 and docs/02.
 ## Cross-machine summary and decision
 - Two NVMe models (Samsung BM9C1, WD SN5000S) on Windows 10.0.26300 and 10.0.26200 both return 326 ("Device does not support file-level TRIM") for every request shape tried. The request layout matches docs/01; a malformed request would be expected to give 87, not 326.
 - Decision (v1): **clean refusal.** When file-level TRIM is refused (313/317/326) the executor reports Failed (exit 7), leaves the file and entry in place, and nothing is unlinked. Workers and UI must treat this as an expected result on common laptop NVMe, not an error condition. `WorkerFixtures.Unsupported` and `Partial` model the refusal and partial cases.
-- Open: whether any local stack accepts file-level TRIM (SATA SSD, thin-provisioned virtual disk, Storage Spaces are candidates; unverified).
+- Open: whether any local stack accepts file-level TRIM. Update: a thin-provisioned VHDX does (see below); SATA SSD and Storage Spaces remain unverified.
 
 ## Refusal paths on disk (machine 1, real Worker CLI, throwaway files in %TEMP%, 12,903 B unless noted)
 | Case | `--inspect` | `--shred --confirm` |
@@ -56,6 +56,14 @@ Observed results only. Expected behaviour lives in docs/01 and docs/02.
 - Not run: symlink (needs privilege) and USB/unknown bridge (no USB drive on this machine).
 - Possible contract questions for the lead: a missing file reports exit 4 (unsupported); path-policy rejections exit 2 without a result event.
 
+## Thin-provisioned VHDX (machine 1, 2026-11-14)
+- Throwaway 256 MB expandable VHDX (`diskpart`), NTFS, 4096-byte cluster. `Get-Disk`: BusType `File Backed Virtual`, ProvisioningType `Thin`. NTFS `DisableDeleteNotify` = 0.
+- **Positive acknowledgement.** `TrimDiagnosticTests` run unelevated with `BELOWZERO_DIAG_DIR=Z:\`: all six request shapes (1 page, 3 pages with/without flush, shared rw, 1 MiB whole file, write-data-only access) returned `win32=0 returned=4 processed=1`. The same request shape gives 326 on both NVMe disks, so the request layout is not the cause of those refusals.
+- Scope of the claim: the stack *accepts* the request on a virtual disk. This does not show that blocks were deallocated or anything about a physical SSD.
+- The real Worker cannot exercise it: `--inspect` on that volume reports `eligible:false, reason:topology, bus:null` (the classifier does not recognise a file-backed virtual disk), and `--shred` refuses to run from an elevated prompt (exit 5). The VHDX had to be attached elevated and the diagnostic run unelevated; the volume was visible to the unelevated session.
+- Cleaned up afterwards (VHDX detached and deleted).
+- Still open: a SATA SSD or Storage Spaces; whether the classifier should ever accept virtual-disk topology (not changed).
+
 ## Not yet run
-- Positive TRIM acknowledgement on real hardware (needs a device whose stack accepts file-level TRIM; try another NVMe or a SATA SSD).
+- Positive TRIM acknowledgement on real hardware (the VHDX accepts it; a physical device does not yet, try a SATA SSD).
 - Unknown-bridge/USB fallback on real hardware, symlink fixture (needs privilege).
